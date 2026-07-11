@@ -4,7 +4,6 @@ import { useState } from "react";
 import type { StepProps, TripPlan } from "./types";
 import StepEvent from "./steps/StepEvent";
 import StepLocation from "./steps/StepLocation";
-import StepTarget from "./steps/StepTarget";
 import StepTravel from "./steps/StepTravel";
 import StepStyle from "./steps/StepStyle";
 
@@ -15,15 +14,18 @@ interface StepDef {
   valid: (p: TripPlan) => boolean;
 }
 
+// Lean onboarding asks only what a machine can't infer: which match, consent to
+// use live location (with an address / rough-distance fallback), how you're
+// getting there, and a coarse comfort style (3 presets, fine-tuned later on the
+// dashboard). Target moment defaults to kickoff and is refined on the dashboard.
 const STEPS: StepDef[] = [
-  { key: "event", title: "Where are you headed?", Body: StepEvent, valid: (p) => !!p.match },
+  { key: "event", title: "Which match are you headed to?", Body: StepEvent, valid: (p) => !!p.match },
   {
     key: "location",
     title: "Where are you starting from?",
     Body: StepLocation,
     valid: (p) => p.origin.freeFlowDriveMin >= 2,
   },
-  { key: "target", title: "When do you want to be seated?", Body: StepTarget, valid: (p) => !!p.target },
   { key: "travel", title: "How are you getting there?", Body: StepTravel, valid: (p) => !!p.mode },
   { key: "style", title: "What's your style?", Body: StepStyle, valid: () => true },
 ];
@@ -87,9 +89,13 @@ export default function Onboarding({
 
         {/* Footer */}
         <div className="mt-7 flex items-center justify-between gap-3">
+          {/* suppressHydrationWarning: `disabled` is deterministic here, but form
+              extensions (password managers, Grammarly, etc.) mutate button
+              attributes before hydration — this keeps that noise out of dev. */}
           <button
             onClick={back}
             disabled={step === 0}
+            suppressHydrationWarning
             className="seg-btn rounded-xl px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
           >
             ← Back
@@ -97,6 +103,7 @@ export default function Onboarding({
           <button
             onClick={next}
             disabled={!canNext}
+            suppressHydrationWarning
             className="rounded-xl bg-accent px-6 py-2.5 text-sm font-bold text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isLast ? "See my plan →" : "Next →"}

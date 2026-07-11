@@ -6,6 +6,7 @@ import { STADIUM_BY_ID } from "@/lib/data/stadiums";
 import type { WeatherInput, WeatherKind } from "@/lib/engine/types";
 import Onboarding from "@/components/onboarding/Onboarding";
 import ResultPanel from "@/components/ResultPanel";
+import DashboardControls from "@/components/DashboardControls";
 import {
   initialPlan,
   planToConditions,
@@ -82,6 +83,9 @@ export default function Home() {
   const setWeatherKind = (kind: WeatherKind) =>
     setManualWeather({ matchId: plan.match.id, weather: { kind, source: "manual" } });
 
+  const updatePlan = (patch: Partial<TripPlan>) =>
+    setPlan((p) => ({ ...p, ...patch }));
+
   return (
     <div className="mx-auto w-full max-w-6xl overflow-x-clip px-4 py-8 sm:px-6 sm:py-12">
       {/* Header */}
@@ -137,6 +141,11 @@ export default function Home() {
               ← Edit trip
             </button>
           </div>
+          <DashboardControls
+            plan={plan}
+            update={updatePlan}
+            costByMode={rec.costByMode}
+          />
           <ResultPanel
             rec={rec}
             match={plan.match}

@@ -225,21 +225,51 @@ Turned today's cosmetic/half-wired inputs into real ones:
 
 `npm run sanity` grew to 30 checks (all green) covering each of the above;
 `typecheck` / `lint` / `build` green; verified live in-browser (storm now moves the
-drive **and** the security line **and** the crowd-at-kickoff). **Candidate bigger
-adds still open:** a **confidence band** (P90 — the product is a *risk* statement
-but is point-estimate only today) and **money** (parking / fare / surge pricing).
+drive **and** the security line **and** the crowd-at-kickoff).
 
-**Phase 2 — Dashboard exposes the full param set** as live controls (an "advanced"
-view; onboarding + chat stay the friendly front doors so 15+ knobs don't
-overwhelm). Live recompute via the existing `useMemo`.
+**Money layer — ✅ DONE (added post-Phase-2).** `engine/money.ts` is a deterministic
+per-mode cost model (same philosophy as `curves.ts`, never fetched): drive = event
+parking (importance + venue scaled) + gas; rideshare = fare + a match-day price
+**surge** derived from the road surge; transit = flat local fare; walk/bike free;
+**food** — a real budget line, not just time: concession spend priced **per venue
+country** (`foodUsdPerMin` USA 1.8 / Canada 1.7 / Mexico 0.8 — a stadium beer + hot
+dog adds up), driven by the concessions buffer and shown as a live `~$` next to that
+slider; a **round-trip** flag doubles the travel-variable lines (fare/rideshare/gas)
+but not the one-time ones (parking, food). Surfaced on the
+dashboard as a per-mode price on the mode buttons, a **typed budget cap** (number
+input) that flags over-budget modes, a one-way/round-trip toggle, and an "Est. cost"
+stat on the result panel. `recommend()` returns `cost` + `costByMode`; sanity grew by
+9 money checks. A live pricing source could later replace any line at the perimeter
+with this as the fallback.
 
-**Phase 3 — Lean onboarding (consent + intent only).** Trim the wizard from 5 steps
-to **3 general questions**: (1) **which match**; (2) **allow live location** — a
-**one-time ping** (`getCurrentPosition`, *not* continuous `watchPosition` tracking)
-to get exact coords for traffic / weather / route, with the address fallback; (3)
-**how you'll get there** (mode). **Target moment + chill are defaulted (Option A:
-kickoff + balanced)** and refined later on the dashboard/chat — *not* asked. Weather,
-traffic, route, drive time and venue specs are all **inferred**, never questions.
+**Next steps (open):**
+- **Food: decouple time from cost (roadmap).** *Time to get food* and *cost of food*
+  are two different things, but today a single control — the concessions **minutes**
+  slider — drives both (the timeline stop and the `~$` budget line via
+  `foodUsdPerMin`). In reality they're independent: a $40 beer-and-dog round can take
+  3 minutes, and lingering 20 minutes might cost nothing. Roadmap item: split them
+  into separate params — a concessions **dwell time** and a **food spend** (its own
+  control / tier), so each moves the plan on its own axis — and then scale the spend
+  by **party size** (a family's round is 4×).
+- **Confidence band (P90).** The product is a *risk* statement but is point-estimate
+  only today — surface a range, not a single leave-by.
+
+**Phase 2 — Dashboard exposes the full param set** as live controls. ✅ **DONE.**
+`DashboardControls.tsx` — a "Fine-tune your plan" card above the result — surfaces
+origin (via the shared `OriginPicker`), target, mode, chill, concessions and party
+buffer; every change mutates `plan` and recomputes through the existing `useMemo`.
+`OriginPicker.tsx` is extracted so onboarding + dashboard are one view on the origin
+param (live location locks its button once selected on the dashboard).
+
+**Phase 3 — Lean onboarding (consent + intent only).** ✅ **DONE.** Wizard trimmed
+from 5 steps to **4**: (1) **which match**; (2) **allow live location** — a one-time
+`getCurrentPosition` ping (never `watchPosition`), consent-forward copy, with the
+address / rough-distance fallback; (3) **how you'll get there** (mode); (4) **your
+style** — a coarse 3-preset take on `chill` (Cut it close / Balanced / Chill & early,
+each landing in a dashboard-slider bucket), fine-tuned later on the dashboard. Target
+moment **defaults to kickoff** (`initialPlan()`) and is refined on the dashboard — the
+dropped `StepTarget` is gone. Weather, traffic, route, drive time and venue specs stay
+**inferred**, never questions. `typecheck` / `lint` / `sanity` / `build` all green.
 
 **Phase 4 — Chatbot over internal endpoints** (§11) for natural-language tuning and
 **scenario what-ifs** (e.g. "compare drive vs transit," "what if it rains") — the

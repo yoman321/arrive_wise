@@ -45,9 +45,9 @@ src/
     layout.tsx globals.css
   components/
     onboarding/
-      Onboarding.tsx   # 5-step wizard shell (progress, Back/Next, validation)
+      Onboarding.tsx   # lean 4-step wizard shell (progress, Back/Next, validation)
       types.ts         # TripPlan + planTo{Trip,Prefs,Conditions} engine bridge  <-- read
-      steps/*.tsx      # StepEvent | StepLocation | StepTarget | StepTravel | StepStyle
+      steps/*.tsx      # StepEvent | StepLocation | StepTravel | StepStyle (target defaults; chill = 3 presets, fine-tuned on dashboard)
     ResultPanel.tsx    # hero, conditions strip (mode·traffic·weather), stats, chart/map/timeline
     WaitChart.tsx Timeline.tsx MatchMap.tsx
   lib/
@@ -56,6 +56,7 @@ src/
       curves.ts        #   constants: arrival/surge/diurnal curves, WEATHER_EFFECTS, parkingSurge, MODE_PHYSICS
       queue.ts         #   crowd + fluid security-queue model (the heart)
       travel.ts        #   per-mode travel physics; back-solve departure from gate arrival
+      money.ts         #   deterministic per-mode cost (parking/gas, rideshare surge, transit fare, food, round-trip)
       cost.ts optimizer.ts time.ts helpers.ts types.ts
     data/
       stadiums.ts matches.ts origins.ts

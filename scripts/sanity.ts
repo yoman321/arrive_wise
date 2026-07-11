@@ -265,5 +265,85 @@ check(
   !rParty.timeline.some((s) => s.key === "concessions")
 );
 
+// ---- Money model ----
+console.log("\n== Money model ==");
+const costOf = (r: ReturnType<typeof recommend>, m: string) =>
+  r.costByMode.find((c) => c.mode === m)!;
+const moneyRec = recommend(stadium, match, { ...trip, mode: "drive" }, close);
+const walkCost = costOf(moneyRec, "walk");
+const transitCost = costOf(moneyRec, "transit");
+const driveCost = costOf(moneyRec, "drive");
+const rideCost = costOf(moneyRec, "rideshare");
+check(
+  "walk/bike are free",
+  walkCost.usd === 0 && costOf(moneyRec, "bike").usd === 0
+);
+check(
+  "transit is a flat, cheap fare (> 0, < drive)",
+  transitCost.usd > 0 && transitCost.usd < driveCost.usd,
+  `transit ${transitCost.usd} vs drive ${driveCost.usd}`
+);
+check(
+  "rideshare is the priciest mode here",
+  rideCost.usd > driveCost.usd && rideCost.usd > transitCost.usd,
+  `ride ${rideCost.usd}`
+);
+check(
+  "selected-mode cost matches the chosen mode",
+  moneyRec.cost.mode === "drive" && moneyRec.cost.usd === driveCost.usd
+);
+check(
+  "every mode cost is finite and non-negative",
+  moneyRec.costByMode.every((c) => Number.isFinite(c.usd) && c.usd >= 0)
+);
+// A final's rideshare (heavier surge + importance) costs more than a group game
+// from the same origin/venue.
+const groupRide = costOf(
+  recommend(stadium, MATCH_BY_ID["group-toronto"], { ...trip, mode: "rideshare" }, close),
+  "rideshare"
+);
+const finalRide = costOf(
+  recommend(stadium, match, { ...trip, mode: "rideshare" }, close),
+  "rideshare"
+);
+check(
+  "rideshare to the final costs more than to a group game",
+  finalRide.usd > groupRide.usd,
+  `${finalRide.usd} vs ${groupRide.usd}`
+);
+
+// Food: concessions time adds a food & drink line to every mode (even walk).
+const withFood = recommend(
+  stadium,
+  match,
+  { ...trip, mode: "walk" },
+  close,
+  conditions({ extras: { concessionsMin: 20, partyBufferMin: 0 } })
+);
+const walkFood = costOf(withFood, "walk");
+check(
+  "grabbing food adds a cost to an otherwise-free walk",
+  walkFood.usd > 0 && walkFood.lines.some((l) => /food/i.test(l.label)),
+  `walk+food ${walkFood.usd}`
+);
+
+// Round trip: doubles travel-variable spend (transit fare, gas) but not parking.
+const oneWay = recommend(stadium, match, { ...trip, mode: "transit", roundTrip: false }, close);
+const twoWay = recommend(stadium, match, { ...trip, mode: "transit", roundTrip: true }, close);
+check(
+  "round-trip transit is exactly double one-way",
+  Math.abs(costOf(twoWay, "transit").usd - 2 * costOf(oneWay, "transit").usd) < 1e-9,
+  `${costOf(twoWay, "transit").usd} vs ${costOf(oneWay, "transit").usd}`
+);
+const driveOne = costOf(recommend(stadium, match, { ...trip, mode: "drive", roundTrip: false }, close), "drive");
+const driveTwo = costOf(recommend(stadium, match, { ...trip, mode: "drive", roundTrip: true }, close), "drive");
+const parkOne = driveOne.lines.find((l) => /parking/i.test(l.label))!.usd;
+const parkTwo = driveTwo.lines.find((l) => /parking/i.test(l.label))!.usd;
+check(
+  "round-trip drive costs more but parking (one-time) stays flat",
+  driveTwo.usd > driveOne.usd && Math.abs(parkTwo - parkOne) < 1e-9,
+  `drive ${driveOne.usd}->${driveTwo.usd}, parking ${parkOne}=${parkTwo}`
+);
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : failures + " CHECK(S) FAILED"}`);
 process.exit(failures === 0 ? 0 : 1);

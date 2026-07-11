@@ -2,38 +2,45 @@
 
 import type { StepProps } from "../types";
 
+// A simplified, 3-option take on the dashboard's fine-grained "chill" slider.
+// Each choice lands squarely in one of the slider's readout buckets
+// (<0.35 close · 0.35–0.65 balanced · >0.65 chill) so onboarding and the
+// dashboard stay one view on the same param — pick one here, fine-tune later.
+const STYLES: { key: string; chill: number; label: string; hint: string }[] = [
+  { key: "close", chill: 0.2, label: "Cut it close", hint: "Lean & late" },
+  { key: "balanced", chill: 0.5, label: "Balanced", hint: "A little cushion" },
+  { key: "chill", chill: 0.8, label: "Chill & early", hint: "Beat the surge" },
+];
+
+/** Which of the three presets the current chill value falls into. */
+function activeKey(chill: number): string {
+  if (chill < 0.35) return "close";
+  if (chill > 0.65) return "chill";
+  return "balanced";
+}
+
 export default function StepStyle({ plan, update }: StepProps) {
-  const chill = plan.chill;
+  const active = activeKey(plan.chill);
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted">
-        Last thing — how do you like to play it? This trades off waiting in line
-        against sitting around early.
+        How do you like to play it? This trades off waiting in the security line
+        against sitting around early — fine-tune it any time on your dashboard.
       </p>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={chill}
-        onChange={(e) => update({ chill: Number(e.target.value) })}
-        className="w-full"
-      />
-      <div className="flex justify-between text-xs">
-        <span className={chill < 0.5 ? "font-semibold text-info" : "text-faint"}>
-          Cut it close
-        </span>
-        <span className={chill >= 0.5 ? "font-semibold text-accent" : "text-faint"}>
-          Chill &amp; early
-        </span>
+      <div className="grid grid-cols-3 gap-2">
+        {STYLES.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => update({ chill: s.chill })}
+            data-active={active === s.key}
+            className="seg-btn rounded-xl px-2 py-4 text-center"
+          >
+            <div className="text-sm font-semibold text-text">{s.label}</div>
+            <div className="mt-0.5 text-[11px] text-faint">{s.hint}</div>
+          </button>
+        ))}
       </div>
-      <p className="text-xs leading-relaxed text-faint">
-        {chill < 0.35
-          ? "Minimise dead time — arrive lean and accept a livelier line."
-          : chill > 0.65
-            ? "Beat the surge with a comfortable cushion, even if it means waiting in your seat."
-            : "A balanced trade-off between the security line and idle time."}
-      </p>
     </div>
   );
 }

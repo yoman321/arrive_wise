@@ -238,7 +238,7 @@ export default function ResultPanel({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat
           label={meta.timeLabel}
           value={fmtDuration(rec.driveMin)}
@@ -260,6 +260,12 @@ export default function ResultPanel({
           value={seatedStep.clock}
           tone="accent"
           sub={`${late ? "" : "+"}${cushion}m vs ${prefs.target}`}
+        />
+        <Stat
+          label="Est. cost"
+          value={rec.cost.usd <= 0 ? "Free" : `$${Math.round(rec.cost.usd)}`}
+          tone={rec.cost.surged ? "warn" : "text"}
+          sub={rec.cost.note ?? "estimate"}
         />
         <Stat
           label="Still outside"

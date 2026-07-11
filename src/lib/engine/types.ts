@@ -79,6 +79,9 @@ export interface TripInput {
   trafficSource?: TrafficSource;
   /** How the fan is travelling. Drives real per-mode physics (see `MODE_PHYSICS`). */
   mode?: TravelMode;
+  /** Cost both ways: doubles the travel-variable spend (fare / rideshare / fuel),
+   * not one-time costs (parking, food). Affects the money model only, not timing. */
+  roundTrip?: boolean;
 }
 
 /** How the fan is getting to the venue. Each mode has its own travel physics. */
@@ -133,6 +136,31 @@ export const DEFAULT_CONDITIONS: Conditions = {
   extras: { concessionsMin: 0, partyBufferMin: 0 },
 };
 
+/** One line of an itemised money estimate (e.g. "Parking (event)", "$37"). */
+export interface CostLine {
+  label: string;
+  usd: number;
+}
+
+/**
+ * Deterministic out-of-pocket estimate for getting to the venue by one mode
+ * (one-way). Research-informed constants (see `money.ts`), coupled to match
+ * importance and match-time surge — a rideshare to a final near kickoff surges,
+ * a train is a flat fare. Not per-match ground truth; a live pricing source can
+ * later replace it at the perimeter with this as the fallback.
+ */
+export interface ModeCost {
+  mode: TravelMode;
+  /** Total estimated USD, one-way. */
+  usd: number;
+  /** Itemised breakdown. */
+  lines: CostLine[];
+  /** Whether match-day dynamic (surge) pricing bit this mode. */
+  surged: boolean;
+  /** Short qualifier for the UI ("per person", "free", …). */
+  note?: string;
+}
+
 /** Multiplicative breakdown of the experienced drive time, for transparency. */
 export interface DriveBreakdown {
   /** Kickoff-proximity / match-importance surge. */
@@ -182,6 +210,10 @@ export interface Recommendation {
   crowdAtKickoff: number;
   /** Multiplicative breakdown of the experienced drive time (surge × baseline × weather). */
   drive: DriveBreakdown;
+  /** Estimated one-way money cost for the chosen mode. */
+  cost: ModeCost;
+  /** Estimated one-way cost for every mode, for a budget comparison. */
+  costByMode: ModeCost[];
   /** Where the ambient traffic figure came from. */
   trafficSource: TrafficSource;
   /** Ambient road multiplier source, for badge wording ("live" vs time-of-day). */

@@ -38,6 +38,11 @@ export interface TripPlan {
   concessionsMin?: number;
   /** Quiet buffer for a slower group — kids, stroller, accessibility (0 = none). */
   partyBufferMin?: number;
+  /** Trip budget cap in USD — a dashboard threshold over the engine's per-mode
+   * cost estimate (flags modes you can't afford; doesn't change timing). */
+  budgetUsd?: number;
+  /** Price the trip both ways (doubles fare / rideshare / gas, not parking/food). */
+  roundTrip?: boolean;
 }
 
 /** Props every wizard step body receives. */
@@ -57,6 +62,8 @@ export function initialPlan(): TripPlan {
     target: "kickoff",
     mode: "drive",
     chill: 0.5,
+    budgetUsd: 60,
+    roundTrip: false,
   };
 }
 
@@ -82,6 +89,7 @@ export function planToTrip(plan: TripPlan): TripInput {
     liveDriveMin: plan.origin.liveDriveMin,
     trafficSource: plan.origin.trafficSource,
     mode: plan.mode,
+    roundTrip: plan.roundTrip ?? false,
   };
 }
 

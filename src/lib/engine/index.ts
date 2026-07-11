@@ -13,6 +13,7 @@ import type {
 import { DEFAULT_CONDITIONS } from "./types";
 import { optimize } from "./optimizer";
 import { travelForGateArrival } from "./travel";
+import { estimateCostByMode } from "./money";
 import { computeSeated } from "./helpers";
 import { TARGET_OFFSET_MIN } from "./curves";
 import { offsetToClock } from "./time";
@@ -39,6 +40,17 @@ export function recommend(
   const throughGateMin = best.gateArrivalMin + best.securityWaitMin;
 
   const mode = trip.mode ?? "drive";
+
+  // Money model: cost every mode at the chosen gate-arrival (so rideshare prices
+  // the real surge), then pull out the selected mode.
+  const costByMode = estimateCostByMode(
+    trip,
+    stadium,
+    match,
+    conditions,
+    best.gateArrivalMin
+  );
+  const cost = costByMode.find((c) => c.mode === mode) ?? costByMode[0];
   const lotLabel =
     mode === "transit"
       ? "Arrive at station"
@@ -124,6 +136,8 @@ export function recommend(
       weather: best.weatherMult,
       total: best.surge * best.baselineMult * best.weatherMult,
     },
+    cost,
+    costByMode,
     trafficSource: trip.trafficSource ?? "preset",
     baselineSource: conditions.baselineTraffic.source,
     weather: conditions.weather,
