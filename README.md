@@ -40,9 +40,13 @@ Everything is computed on a time axis **τ = minutes relative to kickoff** (nega
    `entry_lanes × per-lane throughput` (~11–12 people/lane/min, a standard
    sports-ingress figure). This yields the expected wait for a fan reaching the
    gate at *any* minute — the core "security-line curve" you see in the app.
-3. **Traffic** (`travel.ts`, `curves.ts`) — free-flow drive time (per origin) ×
-   a **match-day surge multiplier** that grows toward kickoff and scales with match
-   importance, plus parking-search and walk times. Car is the baseline mode.
+3. **Traffic & conditions** (`travel.ts`, `curves.ts`) — the experienced drive is
+   free-flow time × three composable multipliers: a **match-day surge** (grows
+   toward kickoff, scales with match importance), an **ambient baseline** (a
+   time-of-day commute curve by default, or a live/predicted traffic ratio when a
+   routing key is set), and a **weather** factor — plus parking-search and walk
+   times. Car is the baseline mode; the plan shows the full `× surge × baseline ×
+   weather` breakdown so nothing is hidden.
 4. **Optimizer** (`cost.ts`, `optimizer.ts`) — sweeps every candidate gate-arrival
    minute and minimizes a cost:
    `security_wait + early_penalty·earliness + late_penalty·lateness + hard_penalty·missed_kickoff`.
@@ -54,13 +58,36 @@ The result: a recommended departure time, a full timeline, the security-line
 curve with your plan marked, a sensitivity readout ("leave 20 min later → +X min
 in line"), and venue context.
 
+## Onboarding & live data (algorithm at the core, data at the perimeter)
+
+You reach the plan through a short **onboarding wizard** — pick a match, share
+*where you're starting from* (one-tap **live location**, an address, or a rough
+distance), choose the moment you can't miss, how you're travelling, and your
+style — then the dashboard reveals your plan.
+
+Real inputs enter only at the **perimeter**, via Next.js API routes, and every
+one degrades gracefully so the demo never depends on a key or the network:
+
+- **Location → real route** — the browser Geolocation API (or an address geocoded
+  through **OSM Nominatim**, keyless) gives real coordinates; `/api/route`
+  computes drive time via **TomTom** (real *live/predicted* traffic, if a key is
+  set) → **OSRM** (real route, free-flow) → a straight-line estimate.
+- **Weather** — `/api/weather` reads the live venue forecast from **Open-Meteo**
+  (keyless) for the match date/hour, with a manual weather selector as fallback.
+
+The recommendation engine itself stays **pure and deterministic**: it consumes a
+small, fully-resolved conditions object and never fetches.
+
 ## Tech
 
-- **Next.js 16 (App Router) + TypeScript + Tailwind v4** — deployed static/serverless.
+- **Next.js 16 (App Router) + TypeScript + Tailwind v4** — deployed serverless.
 - **Recharts** for the wait-vs-arrival curve, **Leaflet + OpenStreetMap** for the
-  venue map (no API keys — nothing to bill or break in a demo).
-- The entire engine is **pure client-side TypeScript**: no backend, no database,
-  no paid APIs. Data lives in `src/lib/data/`.
+  venue map (keyless).
+- The engine is **pure client-side TypeScript**; live data comes through thin
+  server **route handlers** (`src/app/api/*`). **No paid dependency is required** —
+  Nominatim, OSRM and Open-Meteo are keyless; the only optional key (`TOMTOM_KEY`)
+  unlocks live/predicted traffic and is never exposed to the browser. Static data
+  lives in `src/lib/data/`.
 
 ## Run it
 
@@ -69,38 +96,51 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
+Runs fully out of the box. To enable live/predicted traffic, copy `.env.example`
+to `.env.local` and set `TOMTOM_KEY` (free tier — optional; without it routing
+uses the keyless OSRM fallback).
+
 Checks:
 
 ```bash
-npm run sanity     # engine sanity assertions (arrival, queue, traffic, optimizer)
+npm run sanity     # engine assertions (arrival, queue, traffic, weather, optimizer)
 npm run typecheck
+npm run lint
 npm run build
 ```
 
 ## Deploy (free)
 
 Push to GitHub, then import the repo at [vercel.com/new](https://vercel.com/new).
-Vercel auto-detects Next.js — no configuration or environment variables needed.
-Every push redeploys. (Cloudflare Pages / Netlify work identically.)
+Vercel auto-detects Next.js — no configuration required. To turn on live traffic,
+add `TOMTOM_KEY` in the project's environment variables (optional). Every push
+redeploys. (Cloudflare Pages / Netlify work identically.)
 
 ## Project layout
 
 ```
 src/
-  app/                 page, layout, theme
-  components/          Controls, ResultPanel, Timeline, WaitChart, MatchMap
+  app/
+    page.tsx           onboarding ↔ dashboard orchestrator
+    api/               route handlers: geocode · route · weather (with fallbacks)
+  components/
+    onboarding/        the 5-step wizard + steps
+    ResultPanel, Timeline, WaitChart, MatchMap
   lib/
-    engine/            the model: arrivalCurve · queue · travel · cost · optimizer
+    engine/            the model: curves · queue · travel · cost · optimizer
     data/              16 stadiums, sample matches, origin presets
 scripts/sanity.ts      engine assertions
 ```
 
 ## Honesty note
 
-Arrival curves, turnstile throughput and traffic-surge shapes are
-**research-informed parameters**, not per-match ground truth. The honest path for
-real data to enter is a crowdsourced feedback loop (fans reporting actual waits to
-calibrate the model) — a designed-in next step, not part of this build.
+Arrival curves, turnstile throughput, traffic-surge and time-of-day shapes are
+**research-informed parameters**, not per-match ground truth. Live weather
+(Open-Meteo) and, with a key, live/predicted traffic (TomTom) are real; routing
+without a key is a real route with no live traffic, and the offline estimate is
+distance-based. Roof types and travel-mode effects are transparent, tunable
+inputs. The honest path for per-fan calibration is a crowdsourced feedback loop
+(fans reporting actual waits) — a designed-in next step, not part of this build.
 
 ---
 

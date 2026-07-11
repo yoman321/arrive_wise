@@ -1,33 +1,86 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Match, Preferences } from "@/lib/engine/types";
+import { useEffect, useMemo, useState } from "react";
 import { recommend } from "@/lib/engine";
 import { STADIUM_BY_ID } from "@/lib/data/stadiums";
-import { MATCHES } from "@/lib/data/matches";
-import Controls from "@/components/Controls";
+import type { WeatherInput, WeatherKind } from "@/lib/engine/types";
+import Onboarding from "@/components/onboarding/Onboarding";
 import ResultPanel from "@/components/ResultPanel";
+import {
+  initialPlan,
+  planToConditions,
+  planToPrefs,
+  planToTrip,
+  type TripPlan,
+} from "@/components/onboarding/types";
 
 export default function Home() {
-  const [match, setMatch] = useState<Match>(MATCHES[0]);
-  const [driveMin, setDriveMin] = useState<number>(45);
-  const [prefs, setPrefs] = useState<Preferences>({
-    target: "kickoff",
-    chill: 0.5,
-  });
+  const [plan, setPlan] = useState<TripPlan>(() => initialPlan());
+  const [phase, setPhase] = useState<"onboarding" | "dashboard">("onboarding");
+  // Live + manual weather, each scoped to the match it was resolved for so a
+  // match change never shows stale conditions.
+  const [liveWeather, setLiveWeather] = useState<{
+    matchId: string;
+    weather: WeatherInput;
+  } | null>(null);
+  const [manualWeather, setManualWeather] = useState<{
+    matchId: string;
+    weather: WeatherInput;
+  } | null>(null);
 
-  const stadium = STADIUM_BY_ID[match.stadiumId];
+  const stadium = STADIUM_BY_ID[plan.match.stadiumId];
+
+  // Fetch live venue weather for the match date/hour (falls back silently).
+  useEffect(() => {
+    let cancelled = false;
+    const matchId = plan.match.id;
+    const hour = Number(plan.match.kickoff.split(":")[0]);
+    const qs = new URLSearchParams({
+      lat: String(stadium.lat),
+      lng: String(stadium.lng),
+      date: plan.match.date,
+      hour: String(hour),
+    });
+    fetch(`/api/weather?${qs}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((w) => {
+        if (!cancelled && w && !w.error) {
+          setLiveWeather({
+            matchId,
+            weather: {
+              kind: w.kind,
+              source: "live",
+              tempC: w.tempC,
+              precipMm: w.precipMm,
+              windKph: w.windKph,
+            },
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [stadium.lat, stadium.lng, plan.match.date, plan.match.kickoff, plan.match.id]);
+
+  const weather: WeatherInput | undefined =
+    (manualWeather?.matchId === plan.match.id ? manualWeather.weather : undefined) ??
+    (liveWeather?.matchId === plan.match.id ? liveWeather.weather : undefined);
 
   const rec = useMemo(
     () =>
       recommend(
         stadium,
-        match,
-        { freeFlowDriveMin: driveMin, originLabel: `${driveMin} min away` },
-        prefs
+        plan.match,
+        planToTrip(plan),
+        planToPrefs(plan),
+        planToConditions(plan, weather)
       ),
-    [stadium, match, driveMin, prefs]
+    [stadium, plan, weather]
   );
+
+  const setWeatherKind = (kind: WeatherKind) =>
+    setManualWeather({ matchId: plan.match.id, weather: { kind, source: "manual" } });
 
   return (
     <div className="mx-auto w-full max-w-6xl overflow-x-clip px-4 py-8 sm:px-6 sm:py-12">
@@ -44,35 +97,56 @@ export default function Home() {
             World Cup 2026
           </span>
         </div>
-        <h1 className="mt-6 max-w-2xl text-3xl font-black leading-tight tracking-tight text-text sm:text-4xl">
-          The smartest time to{" "}
-          <span className="text-accent">arrive</span> at the match.
-        </h1>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted sm:text-base">
-          ArriveWise models match-day traffic, the crowd&apos;s arrival curve and
-          the security-line surge, then finds the latest you can comfortably
-          leave — so you skip the queue and still catch the moment you care
-          about.
-        </p>
+        {phase === "onboarding" && (
+          <>
+            <h1 className="mt-6 max-w-2xl text-3xl font-black leading-tight tracking-tight text-text sm:text-4xl">
+              The smartest time to{" "}
+              <span className="text-accent">arrive</span> at the match.
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted sm:text-base">
+              Answer a few quick questions and ArriveWise models match-day traffic,
+              the crowd&apos;s arrival curve and the security-line surge to find the
+              latest you can comfortably leave.
+            </p>
+          </>
+        )}
       </header>
 
-      {/* App */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
-        <aside className="card h-fit p-6 lg:sticky lg:top-8">
-          <Controls
-            match={match}
-            onMatch={setMatch}
-            driveMin={driveMin}
-            onDrive={setDriveMin}
-            prefs={prefs}
-            onPrefs={setPrefs}
+      {phase === "onboarding" ? (
+        <Onboarding
+          initial={plan}
+          onComplete={(p) => {
+            setPlan(p);
+            setPhase("dashboard");
+          }}
+        />
+      ) : (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-muted">
+              Your plan for{" "}
+              <span className="font-semibold text-text">
+                {plan.match.home} vs {plan.match.away}
+              </span>{" "}
+              · from {plan.origin.label}
+            </div>
+            <button
+              onClick={() => setPhase("onboarding")}
+              className="seg-btn rounded-xl px-4 py-2 text-sm font-medium"
+            >
+              ← Edit trip
+            </button>
+          </div>
+          <ResultPanel
+            rec={rec}
+            match={plan.match}
+            prefs={planToPrefs(plan)}
+            mode={plan.mode}
+            weather={weather}
+            onWeather={setWeatherKind}
           />
-        </aside>
-
-        <main className="min-w-0">
-          <ResultPanel rec={rec} match={match} prefs={prefs} />
-        </main>
-      </div>
+        </div>
+      )}
 
       <footer className="mt-12 border-t border-border-soft pt-6 text-xs text-faint">
         <p>

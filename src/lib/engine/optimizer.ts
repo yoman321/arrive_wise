@@ -3,11 +3,13 @@
 
 import type {
   ArrivalSample,
+  Conditions,
   Match,
   Preferences,
   Stadium,
   TripInput,
 } from "./types";
+import { DEFAULT_CONDITIONS } from "./types";
 import { buildQueueModel, type QueueModel } from "./queue";
 import { travelForGateArrival } from "./travel";
 import { evaluateCost } from "./cost";
@@ -20,6 +22,9 @@ export interface OptimizationResult {
     driveMin: number;
     departMin: number;
     lotArrivalMin: number;
+    surge: number;
+    baselineMult: number;
+    weatherMult: number;
   };
   curve: ArrivalSample[];
   queue: QueueModel;
@@ -40,7 +45,8 @@ export function optimize(
   stadium: Stadium,
   match: Match,
   trip: TripInput,
-  prefs: Preferences
+  prefs: Preferences,
+  conditions: Conditions = DEFAULT_CONDITIONS
 ): OptimizationResult {
   const queue = buildQueueModel(stadium, match);
 
@@ -66,7 +72,8 @@ export function optimize(
         gateArrivalMin,
         trip.freeFlowDriveMin,
         stadium,
-        match.round
+        match,
+        conditions
       );
       best = {
         gateArrivalMin,
@@ -75,6 +82,9 @@ export function optimize(
         driveMin: leg.driveMin,
         departMin: leg.departMin,
         lotArrivalMin: leg.lotArrivalMin,
+        surge: leg.surge,
+        baselineMult: leg.baselineMult,
+        weatherMult: leg.weatherMult,
       };
     }
   }

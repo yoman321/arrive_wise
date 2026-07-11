@@ -1,12 +1,46 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { Match, Preferences, Recommendation } from "@/lib/engine/types";
+import type {
+  Match,
+  Preferences,
+  Recommendation,
+  TrafficSource,
+  TravelMode,
+  WeatherInput,
+  WeatherKind,
+} from "@/lib/engine/types";
 import { fmtDuration, TARGET_LABEL } from "@/lib/engine";
 import { matchTitle } from "@/lib/ui";
 import { STADIUM_BY_ID } from "@/lib/data/stadiums";
 import Timeline from "./Timeline";
 import WaitChart from "./WaitChart";
+
+const MODE_META: Record<
+  TravelMode,
+  { icon: string; label: string; verb: (d: string) => string }
+> = {
+  drive: { icon: "🚗", label: "Drive", verb: (d) => `drive ${d} through match-day traffic` },
+  transit: { icon: "🚆", label: "Transit", verb: (d) => `travel ${d} in on transit` },
+  rideshare: { icon: "🚕", label: "Rideshare", verb: (d) => `ride ${d} through match-day traffic` },
+};
+
+const WEATHER_META: Record<WeatherKind, { icon: string; label: string }> = {
+  clear: { icon: "☀️", label: "Clear" },
+  rain: { icon: "🌧️", label: "Rain" },
+  heat: { icon: "🔥", label: "Heat" },
+  cold: { icon: "❄️", label: "Cold" },
+  wind: { icon: "💨", label: "Wind" },
+  storm: { icon: "⛈️", label: "Storm" },
+};
+
+const TRAFFIC_LABEL: Record<TrafficSource, string> = {
+  live: "live traffic",
+  predicted: "predicted traffic",
+  routed: "real route",
+  estimate: "est. distance",
+  preset: "time-of-day model",
+};
 
 const MatchMap = dynamic(() => import("./MatchMap"), {
   ssr: false,
@@ -53,15 +87,23 @@ export default function ResultPanel({
   rec,
   match,
   prefs,
+  mode,
+  weather,
+  onWeather,
 }: {
   rec: Recommendation;
   match: Match;
   prefs: Preferences;
+  mode: TravelMode;
+  weather?: WeatherInput;
+  onWeather: (kind: WeatherKind) => void;
 }) {
   const cushion = Math.round(rec.cushionMin);
   const late = cushion < 0;
   const targetLabel = TARGET_LABEL[prefs.target];
   const stadium = STADIUM_BY_ID[match.stadiumId];
+  const driveDur = fmtDuration(rec.driveMin);
+  const curWeather = weather?.kind ?? "clear";
 
   return (
     <div className="space-y-5">
@@ -98,8 +140,8 @@ export default function ResultPanel({
         </div>
 
         <p className="mt-4 text-sm leading-relaxed text-muted">
-          You&apos;ll drive {fmtDuration(rec.driveMin)} through match-day traffic,
-          reach the gate <b className="text-text">{fmtDuration(-rec.gateArrivalMin)}</b> before
+          You&apos;ll {MODE_META[mode].verb(driveDur)}, reach the gate{" "}
+          <b className="text-text">{fmtDuration(-rec.gateArrivalMin)}</b> before
           kickoff, clear security in about{" "}
           <b
             className={
@@ -111,6 +153,45 @@ export default function ResultPanel({
           , and settle into your seat at{" "}
           <b className="text-accent">{rec.timeline[3].clock}</b>.
         </p>
+        <p className="mt-2 text-xs text-faint">
+          Drive = free-flow × {rec.drive.surge.toFixed(2)} surge ×{" "}
+          {rec.drive.baseline.toFixed(2)}{" "}
+          {rec.baselineSource === "live" ? "live traffic" : "time-of-day"} ×{" "}
+          {rec.drive.weather.toFixed(2)} weather
+        </p>
+      </div>
+
+      {/* Conditions strip: mode · traffic provenance · interactive weather */}
+      <div className="card flex flex-wrap items-center gap-2 p-4 text-xs">
+        <span className="chip px-2.5 py-1 text-muted">
+          {MODE_META[mode].icon} {MODE_META[mode].label}
+        </span>
+        <span className="chip px-2.5 py-1 text-info">
+          🛣 {TRAFFIC_LABEL[rec.trafficSource]}
+        </span>
+        <span className="ml-auto flex items-center gap-1.5">
+          <span className="text-faint">
+            Weather
+            {weather?.source === "live" && weather.tempC != null
+              ? ` · ${weather.tempC}°C`
+              : ""}
+            :
+          </span>
+          {(Object.keys(WEATHER_META) as WeatherKind[]).map((k) => (
+            <button
+              key={k}
+              onClick={() => onWeather(k)}
+              data-active={curWeather === k}
+              title={WEATHER_META[k].label}
+              className="seg-btn rounded-lg px-2 py-1 text-sm leading-none"
+            >
+              {WEATHER_META[k].icon}
+            </button>
+          ))}
+          {weather?.source === "live" && (
+            <span className="chip px-2 py-0.5 text-[10px] text-accent">live</span>
+          )}
+        </span>
       </div>
 
       {/* Stats */}
@@ -119,7 +200,7 @@ export default function ResultPanel({
           label="Drive time"
           value={fmtDuration(rec.driveMin)}
           tone="info"
-          sub="with surge"
+          sub={`×${rec.drive.total.toFixed(2)} vs free-flow`}
         />
         <Stat
           label="Security line"

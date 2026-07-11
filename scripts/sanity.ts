@@ -4,7 +4,8 @@
 import { recommend } from "../src/lib/engine";
 import { STADIUM_BY_ID } from "../src/lib/data/stadiums";
 import { MATCH_BY_ID } from "../src/lib/data/matches";
-import type { Preferences, TripInput } from "../src/lib/engine/types";
+import { diurnalTrafficMultiplier } from "../src/lib/engine/curves";
+import type { Conditions, Preferences, TripInput } from "../src/lib/engine/types";
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = "") {
@@ -106,6 +107,59 @@ check(
   "smaller group-stage venue has smaller crowd-at-kickoff than the final",
   small.crowdAtKickoff < recChill.crowdAtKickoff,
   `${small.crowdAtKickoff} vs ${recChill.crowdAtKickoff}`
+);
+
+// ---- Live conditions (weather + baseline traffic) ----
+console.log("\n== Conditions layer ==");
+const clearCond: Conditions = {
+  baselineTraffic: { source: "auto", mult: 1 },
+  weather: { kind: "clear", source: "manual" },
+};
+const stormCond: Conditions = {
+  baselineTraffic: { source: "auto", mult: 1 },
+  weather: { kind: "storm", source: "manual" },
+};
+const liveHeavy: Conditions = {
+  baselineTraffic: { source: "live", mult: 1.6 },
+  weather: { kind: "clear", source: "manual" },
+};
+const rClear = recommend(stadium, match, trip, close, clearCond);
+const rStorm = recommend(stadium, match, trip, close, stormCond);
+const rLive = recommend(stadium, match, trip, close, liveHeavy);
+
+check(
+  "storm weather increases drive time vs clear",
+  rStorm.driveMin > rClear.driveMin,
+  `${rStorm.driveMin.toFixed(1)} vs ${rClear.driveMin.toFixed(1)}`
+);
+check(
+  "storm weather multiplier surfaced as 1.28",
+  Math.abs(rStorm.drive.weather - 1.28) < 1e-9,
+  `${rStorm.drive.weather}`
+);
+check(
+  "live heavy traffic (×1.6) inflates drive vs clear auto",
+  rLive.driveMin > rClear.driveMin && Math.abs(rLive.drive.baseline - 1.6) < 1e-9,
+  `${rLive.driveMin.toFixed(1)} vs ${rClear.driveMin.toFixed(1)}, baseline ${rLive.drive.baseline}`
+);
+check(
+  "live source is echoed for badge wording",
+  rLive.baselineSource === "live" && rLive.trafficSource === "preset"
+);
+check(
+  "default (no-conditions) recommend still yields a finite plan — key-free path",
+  Number.isFinite(recClose.leaveByMin) && Number.isFinite(recClose.driveMin)
+);
+
+// Time-of-day baseline: an evening (PM-rush) arrival is worse than midday.
+check(
+  "diurnal traffic: 6pm weekday > noon weekday",
+  diurnalTrafficMultiplier(18 * 60, false) > diurnalTrafficMultiplier(12 * 60, false),
+  `${diurnalTrafficMultiplier(18 * 60, false).toFixed(2)} vs ${diurnalTrafficMultiplier(12 * 60, false).toFixed(2)}`
+);
+check(
+  "diurnal traffic: weekday PM peak heavier than weekend PM",
+  diurnalTrafficMultiplier(17.5 * 60, false) > diurnalTrafficMultiplier(17.5 * 60, true)
 );
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : failures + " CHECK(S) FAILED"}`);

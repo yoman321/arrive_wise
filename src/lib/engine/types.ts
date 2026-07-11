@@ -25,7 +25,17 @@ export interface Stadium {
   gateToSeatWalkMin: number;
   /** Whether decent public transit exists (affects surge, informational). */
   hasTransit: boolean;
+  /**
+   * Roof configuration. Gates how much weather bites (an open bowl is fully
+   * exposed; a dome shrugs it off). Optional for now — the roof-aware weather
+   * refinement (throughput/walk effects) is a follow-up; today only the drive
+   * exposure uses it lightly. Defaults to "open" when absent.
+   */
+  roofType?: RoofType;
 }
+
+/** How a venue is covered — drives weather sensitivity. */
+export type RoofType = "open" | "retractable" | "dome";
 
 /** Match importance drives expected attendance fraction + traffic surge. */
 export type Round = "group" | "round32" | "round16" | "quarter" | "semi" | "final";
@@ -56,6 +66,74 @@ export interface TripInput {
   /** Free-flow driving minutes from origin to venue (no traffic). */
   freeFlowDriveMin: number;
   originLabel: string;
+  /** Real origin coordinates, when resolved from geolocation/geocoding. */
+  originLat?: number;
+  originLng?: number;
+  /**
+   * Drive minutes *with* traffic from a live/predictive routing source, when
+   * available. The engine derives the baseline congestion ratio from this.
+   */
+  liveDriveMin?: number;
+  /** Where the drive number came from (for provenance + UI badges). */
+  trafficSource?: TrafficSource;
+  /** How the fan is travelling. Captured now; deep mode physics is a follow-up. */
+  mode?: TravelMode;
+}
+
+/** How the fan is getting to the venue. */
+export type TravelMode = "drive" | "transit" | "rideshare";
+
+/** Coarse weather bucket driving a light drive-time effect (deep effects are a follow-up). */
+export type WeatherKind = "clear" | "rain" | "heat" | "cold" | "wind" | "storm";
+
+/** Provenance of the drive/traffic number, surfaced as a badge on the dashboard. */
+export type TrafficSource =
+  | "live" // real-time traffic near the venue
+  | "predicted" // predictive traffic for the future match time
+  | "routed" // real route distance, free-flow only (no live traffic)
+  | "estimate" // straight-line distance heuristic
+  | "preset"; // hand-picked origin preset, no coordinates
+
+export interface WeatherInput {
+  kind: WeatherKind;
+  source: "manual" | "live";
+  /** Present when sourced live (Open-Meteo). */
+  tempC?: number;
+  precipMm?: number;
+  windKph?: number;
+}
+
+/**
+ * Live/ambient conditions the engine folds into the plan. Kept deliberately
+ * small: the core stays pure and deterministic, and every field has a safe
+ * default so the perimeter data layer is purely additive.
+ */
+export interface Conditions {
+  /**
+   * Ambient road congestion, separate from the kickoff-proximity surge.
+   * - "auto": derive a time-of-day (diurnal) multiplier per candidate.
+   * - "live": use `mult` directly (from a real/predicted routing ratio).
+   * - "estimate": use `mult` directly (from a coarse heuristic).
+   */
+  baselineTraffic: { source: "auto" | "live" | "estimate"; mult: number };
+  weather: WeatherInput;
+}
+
+export const DEFAULT_CONDITIONS: Conditions = {
+  baselineTraffic: { source: "auto", mult: 1 },
+  weather: { kind: "clear", source: "manual" },
+};
+
+/** Multiplicative breakdown of the experienced drive time, for transparency. */
+export interface DriveBreakdown {
+  /** Kickoff-proximity / match-importance surge. */
+  surge: number;
+  /** Ambient time-of-day or live-traffic multiplier. */
+  baseline: number;
+  /** Weather multiplier. */
+  weather: number;
+  /** Product of the three. */
+  total: number;
 }
 
 /** One sampled point on the "if you arrive at the gate at time τ" curves. */
@@ -93,6 +171,14 @@ export interface Recommendation {
   sensitivity: { laterByMin: number; extraWaitMin: number; newCushionMin: number };
   /** Expected number of fans still outside the gates at kickoff (context stat). */
   crowdAtKickoff: number;
+  /** Multiplicative breakdown of the experienced drive time (surge × baseline × weather). */
+  drive: DriveBreakdown;
+  /** Where the ambient traffic figure came from. */
+  trafficSource: TrafficSource;
+  /** Ambient road multiplier source, for badge wording ("live" vs time-of-day). */
+  baselineSource: Conditions["baselineTraffic"]["source"];
+  /** Weather assumed for this plan (echoed for the dashboard). */
+  weather: WeatherInput;
 }
 
 export interface TimelineStep {

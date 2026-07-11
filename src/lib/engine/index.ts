@@ -2,6 +2,7 @@
 // display-ready Recommendation.
 
 import type {
+  Conditions,
   Match,
   Preferences,
   Recommendation,
@@ -9,6 +10,7 @@ import type {
   TimelineStep,
   TripInput,
 } from "./types";
+import { DEFAULT_CONDITIONS } from "./types";
 import { optimize } from "./optimizer";
 import { travelForGateArrival } from "./travel";
 import { seatedForExport } from "./helpers";
@@ -23,9 +25,10 @@ export function recommend(
   stadium: Stadium,
   match: Match,
   trip: TripInput,
-  prefs: Preferences
+  prefs: Preferences,
+  conditions: Conditions = DEFAULT_CONDITIONS
 ): Recommendation {
-  const { best, curve, queue } = optimize(stadium, match, trip, prefs);
+  const { best, curve, queue } = optimize(stadium, match, trip, prefs, conditions);
   const target = TARGET_OFFSET_MIN[prefs.target];
 
   const timeline: TimelineStep[] = [
@@ -86,6 +89,15 @@ export function recommend(
     curve,
     sensitivity,
     crowdAtKickoff: queue.crowdAtKickoff,
+    drive: {
+      surge: best.surge,
+      baseline: best.baselineMult,
+      weather: best.weatherMult,
+      total: best.surge * best.baselineMult * best.weatherMult,
+    },
+    trafficSource: trip.trafficSource ?? "preset",
+    baselineSource: conditions.baselineTraffic.source,
+    weather: conditions.weather,
   };
 }
 

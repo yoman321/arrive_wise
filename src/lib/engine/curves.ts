@@ -12,7 +12,7 @@
 //    a surge multiplier on free-flow drive time that grows toward kickoff and is
 //    scaled by expected attendance / match importance.
 
-import type { Round, TargetMoment } from "./types";
+import type { Round, TargetMoment, WeatherKind } from "./types";
 
 /** Centre of the crowd gate-arrival distribution, minutes before kickoff. */
 export const ARRIVAL_PEAK_MIN = -32;
@@ -72,3 +72,41 @@ export function trafficSurge(arriveMin: number, roundWeight: number): number {
   const bump = peak * Math.exp(-0.5 * Math.pow((arriveMin + 30) / 55, 2));
   return 1 + Math.max(0, bump);
 }
+
+/**
+ * Ambient (non-match) road congestion by time of day — the "auto" baseline used
+ * when no live routing ratio is available. A smooth base-1.0 curve with a morning
+ * and an evening commute peak; weekends are flatter. This is what makes an 8pm
+ * kickoff (arrival window overlaps the PM rush) drive worse than a noon one.
+ *
+ * `clockMin` is minutes since local midnight (0..1439).
+ */
+export function diurnalTrafficMultiplier(
+  clockMin: number,
+  isWeekend: boolean
+): number {
+  const m = ((clockMin % 1440) + 1440) % 1440;
+  // Two Gaussian bumps: AM peak ~08:00, PM peak ~17:30. PM is the heavier one.
+  const amPeak = isWeekend ? 0.06 : 0.24;
+  const pmPeak = isWeekend ? 0.1 : 0.32;
+  const am = amPeak * Math.exp(-0.5 * Math.pow((m - 8 * 60) / 70, 2));
+  const pm = pmPeak * Math.exp(-0.5 * Math.pow((m - 17.5 * 60) / 85, 2));
+  // A gentle overnight discount (very light roads 00:00–05:00).
+  const night = m < 5 * 60 ? -0.08 * Math.exp(-0.5 * Math.pow((m - 3 * 60) / 90, 2)) : 0;
+  return Math.max(0.85, 1 + am + pm + night);
+}
+
+/**
+ * Light weather effect on drive time. Precipitation/wind slow traffic; heat/cold
+ * are milder. The deeper effects (security throughput, walking pace, "get under
+ * cover" urgency, roof gating) are a documented follow-up — this keeps weather
+ * visible in the plan today without overclaiming.
+ */
+export const WEATHER_DRIVE_MULT: Record<WeatherKind, number> = {
+  clear: 1.0,
+  heat: 1.03,
+  cold: 1.05,
+  wind: 1.08,
+  rain: 1.15,
+  storm: 1.28,
+};
