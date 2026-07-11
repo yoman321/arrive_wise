@@ -8,6 +8,8 @@ const MODES: { key: TravelMode; label: string; icon: string; hint: string }[] = 
   { key: "drive", label: "Drive", icon: "🚗", hint: "park & walk in" },
   { key: "transit", label: "Transit", icon: "🚆", hint: "rail / bus" },
   { key: "rideshare", label: "Rideshare", icon: "🚕", hint: "drop-off zone" },
+  { key: "walk", label: "Walk", icon: "🚶", hint: "on foot" },
+  { key: "bike", label: "Bike", icon: "🚲", hint: "ride & lock up" },
 ];
 
 export default function StepTravel({ plan, update }: StepProps) {
@@ -41,8 +43,9 @@ export default function StepTravel({ plan, update }: StepProps) {
         })}
       </div>
       <p className="text-xs leading-relaxed text-faint">
-        Transit and rideshare are captured now and refine the walk/drop-off leg;
-        the full multi-modal model is on the way.
+        Each mode has its own physics: transit and bike skip road surge and
+        parking, rideshare trades parking for a drop-off delay, and walking is
+        priced by the weather on your feet.
       </p>
     </div>
   );

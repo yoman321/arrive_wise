@@ -4,8 +4,25 @@
 import { recommend } from "../src/lib/engine";
 import { STADIUM_BY_ID } from "../src/lib/data/stadiums";
 import { MATCH_BY_ID } from "../src/lib/data/matches";
-import { diurnalTrafficMultiplier } from "../src/lib/engine/curves";
+import {
+  diurnalTrafficMultiplier,
+  parkingSurge,
+  roofExposure,
+  weatherThroughputMult,
+  weatherWalkMult,
+  ROUND_SURGE_WEIGHT,
+} from "../src/lib/engine/curves";
 import type { Conditions, Preferences, TripInput } from "../src/lib/engine/types";
+
+/** Build a Conditions with clear weather and given extras/weather overrides. */
+function conditions(over: Partial<Conditions> = {}): Conditions {
+  return {
+    baselineTraffic: { source: "auto", mult: 1 },
+    weather: { kind: "clear", source: "manual" },
+    extras: { concessionsMin: 0, partyBufferMin: 0 },
+    ...over,
+  };
+}
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = "") {
@@ -111,18 +128,9 @@ check(
 
 // ---- Live conditions (weather + baseline traffic) ----
 console.log("\n== Conditions layer ==");
-const clearCond: Conditions = {
-  baselineTraffic: { source: "auto", mult: 1 },
-  weather: { kind: "clear", source: "manual" },
-};
-const stormCond: Conditions = {
-  baselineTraffic: { source: "auto", mult: 1 },
-  weather: { kind: "storm", source: "manual" },
-};
-const liveHeavy: Conditions = {
-  baselineTraffic: { source: "live", mult: 1.6 },
-  weather: { kind: "clear", source: "manual" },
-};
+const clearCond = conditions();
+const stormCond = conditions({ weather: { kind: "storm", source: "manual" } });
+const liveHeavy = conditions({ baselineTraffic: { source: "live", mult: 1.6 } });
 const rClear = recommend(stadium, match, trip, close, clearCond);
 const rStorm = recommend(stadium, match, trip, close, stormCond);
 const rLive = recommend(stadium, match, trip, close, liveHeavy);
@@ -160,6 +168,101 @@ check(
 check(
   "diurnal traffic: weekday PM peak heavier than weekend PM",
   diurnalTrafficMultiplier(17.5 * 60, false) > diurnalTrafficMultiplier(17.5 * 60, true)
+);
+
+// ---- Phase 1: full weather (throughput / walk / comfort + roof gating) ----
+console.log("\n== Weather depth + roof gating ==");
+check(
+  "storm slows security throughput vs clear",
+  weatherThroughputMult("storm") < weatherThroughputMult("clear"),
+  `${weatherThroughputMult("storm")} vs ${weatherThroughputMult("clear")}`
+);
+check(
+  "storm => more fans still outside at kickoff than clear (slower lanes)",
+  rStorm.crowdAtKickoff > rClear.crowdAtKickoff,
+  `${rStorm.crowdAtKickoff} vs ${rClear.crowdAtKickoff}`
+);
+check(
+  "roof gates weather: a dome's seat-walk penalty < an open bowl's in a storm",
+  weatherWalkMult("storm", roofExposure(STADIUM_BY_ID["sofi"].roofType)) <
+    weatherWalkMult("storm", roofExposure(STADIUM_BY_ID["metlife"].roofType)),
+  `dome ${weatherWalkMult("storm", roofExposure(STADIUM_BY_ID["sofi"].roofType)).toFixed(3)} vs open ${weatherWalkMult("storm", roofExposure(STADIUM_BY_ID["metlife"].roofType)).toFixed(3)}`
+);
+check(
+  "clear weather is fully neutral (walk/throughput = 1)",
+  weatherWalkMult("clear", 1) === 1 && weatherThroughputMult("clear") === 1
+);
+
+// ---- Phase 1: parking surge ----
+console.log("\n== Parking surge ==");
+const finalWeight = ROUND_SURGE_WEIGHT["final"];
+check(
+  "parking search worse near kickoff than 2h before",
+  parkingSurge(-8, finalWeight) > parkingSurge(-120, finalWeight),
+  `${parkingSurge(-8, finalWeight).toFixed(2)} vs ${parkingSurge(-120, finalWeight).toFixed(2)}`
+);
+check(
+  "parking surge never below free-flow (>= 1)",
+  parkingSurge(-8, finalWeight) >= 1 && parkingSurge(-300, finalWeight) >= 1
+);
+
+// ---- Phase 1: mode physics ----
+console.log("\n== Mode physics ==");
+const driveTrip: TripInput = { ...trip, mode: "drive" };
+const transitTrip: TripInput = { ...trip, mode: "transit" };
+const walkTrip: TripInput = { freeFlowDriveMin: 12, originLabel: "nearby", mode: "walk" };
+const rDrive = recommend(stadium, match, driveTrip, close);
+const rTransit = recommend(stadium, match, transitTrip, close);
+const rWalk = recommend(stadium, match, walkTrip, close);
+check(
+  "drive is subject to match-day road surge (>1)",
+  rDrive.drive.surge > 1,
+  `${rDrive.drive.surge.toFixed(2)}`
+);
+check(
+  "transit skips road surge (surge = 1)",
+  Math.abs(rTransit.drive.surge - 1) < 1e-9,
+  `${rTransit.drive.surge.toFixed(2)}`
+);
+check(
+  "walk mode yields a finite plan and no road surge",
+  Number.isFinite(rWalk.leaveByMin) && Math.abs(rWalk.drive.surge - 1) < 1e-9
+);
+
+// ---- Phase 1: concessions + party buffer ----
+console.log("\n== Concessions + party buffer ==");
+const baseExtras = recommend(stadium, match, trip, close, conditions());
+const rFood = recommend(
+  stadium,
+  match,
+  trip,
+  close,
+  conditions({ extras: { concessionsMin: 15, partyBufferMin: 0 } })
+);
+const rParty = recommend(
+  stadium,
+  match,
+  trip,
+  close,
+  conditions({ extras: { concessionsMin: 0, partyBufferMin: 12 } })
+);
+check(
+  "concessions push departure earlier",
+  rFood.leaveByMin < baseExtras.leaveByMin,
+  `${rFood.leaveByMin} vs ${baseExtras.leaveByMin}`
+);
+check(
+  "concessions add a visible timeline step",
+  rFood.timeline.some((s) => s.key === "concessions")
+);
+check(
+  "party buffer pushes departure earlier",
+  rParty.leaveByMin < baseExtras.leaveByMin,
+  `${rParty.leaveByMin} vs ${baseExtras.leaveByMin}`
+);
+check(
+  "party buffer stays quiet (no concessions step)",
+  !rParty.timeline.some((s) => s.key === "concessions")
 );
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : failures + " CHECK(S) FAILED"}`);

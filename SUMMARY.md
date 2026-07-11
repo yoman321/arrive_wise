@@ -1,8 +1,11 @@
 # ArriveWise — Context Primer (paste this to re-prompt an AI)
 
-> **How to use this doc:** paste it at the start of a new conversation, then add your
-> ask at the bottom. It gives an AI agent everything it needs to continue without
-> re-deriving the project. Keep it updated as things change.
+> **How to use this doc:** the durable rules an agent must always follow — the hard
+> architectural constraints, the verify commands and the learned gotchas — now live
+> in **`AGENTS.md`** (auto-loaded every session via `CLAUDE.md`). This file is the
+> narrative primer: status, how the model works, provenance and the roadmap. Paste
+> it (or just read it) to pick up the "why" and what's next; add your ask at the
+> bottom. Keep both updated as things change.
 
 ---
 
@@ -17,10 +20,13 @@ World Cup 2026** / its 16 host stadiums; the engine is event-agnostic.
 **Current status:** **onboarding-first** — a 5-step wizard (event → live location →
 seat-by → travel → style) reveals the dashboard of recommendations. A live-data
 **perimeter** (geolocation + routing + weather via API routes) now sits over the
-deterministic engine, each source with a keyless fallback. Runs locally;
-`sanity` / `typecheck` / `lint` green. The only optional key is `TOMTOM_KEY` (live/
-predicted traffic); without it routing uses keyless OSRM → estimate. Deferred
-follow-ups: transit/rideshare *physics*, concessions, roof-aware weather effects.
+deterministic engine, each source with a keyless fallback. **Phase 1 of the
+roadmap (§12) is complete** — every parameter is now modeled in the algo: full
+weather (throughput/walk/comfort, roof-gated), real per-mode physics (drive /
+rideshare / transit / walk / bike), parking surge, and concessions + party buffer.
+Runs locally; `sanity` (30 checks) / `typecheck` / `lint` / `build` green. The only
+optional key is `TOMTOM_KEY` (live/predicted traffic); without it routing uses
+keyless OSRM → estimate. Remaining candidates: confidence band (P90) and money.
 
 ## 2. Environment & how to run
 
@@ -29,60 +35,25 @@ follow-ups: transit/rideshare *physics*, concessions, roof-aware weather effects
 ```bash
 npm install
 npm run dev        # http://localhost:3000
-npm run sanity     # engine self-checks (headless, no UI)
-npm run typecheck  # tsc --noEmit
-npm run lint
-npm run build      # must pass — this is what Vercel runs
 ```
+- Verify commands (`sanity` / `typecheck` / `lint` / `build`) → see **`AGENTS.md`**.
 - Optional: `cp .env.example .env.local` and set `TOMTOM_KEY` for live/predicted
   traffic. Runs fully without it (OSRM → estimate fallback). Geolocation needs a
   secure context — `localhost` is fine.
 
 ## 3. Stack & hard constraints (respect these)
 
-- **Next.js 16 (App Router) + TypeScript + Tailwind v4.**
-- **No paid dependency required.** Nominatim (geocode), OSRM (routing) and
-  Open-Meteo (weather) are keyless; `TOMTOM_KEY` is the only key and is **optional**
-  (live/predicted traffic), server-side only, never exposed to the browser.
-- **Engine core is client-side + deterministic.** Live data enters only through thin
-  server **route handlers** (`src/app/api/*`), each with a deterministic fallback so
-  the demo never depends on a key/permission/network.
-- **Keep the core an algorithm, not an LLM** — data/LLMs are perimeter-only (§7).
-- Charts: **Recharts**. Map: **Leaflet + OpenStreetMap** (no key). Theme: committed
-  **dark** "stadium at night" (`src/app/globals.css`).
-- Static data only, hand-authored (see §6 provenance caveat).
+**→ Moved to `AGENTS.md` ("Architecture") — the always-loaded rule set.** In brief:
+Next.js 16 + TypeScript + Tailwind v4; algorithm at the core (deterministic, never
+fetches), data/LLM at the perimeter (`src/app/api/*`, each with a fallback); no paid
+dependency (`TOMTOM_KEY` optional/server-only); Recharts + Leaflet/OSM; committed
+dark theme; hand-authored static data (§6 provenance caveat).
 
 ## 4. File map (where everything is)
 
-```
-src/
-  app/
-    page.tsx           # orchestrator: onboarding <-> dashboard; fetches live weather
-    api/
-      geocode/route.ts # Nominatim proxy (address -> coords)
-      route/route.ts   # drive time: TomTom -> OSRM -> haversine estimate
-      weather/route.ts # Open-Meteo venue forecast -> WeatherKind
-    layout.tsx globals.css
-  components/
-    onboarding/
-      Onboarding.tsx   # 5-step wizard shell (progress, Back/Next, validation)
-      types.ts         # TripPlan + planTo{Trip,Prefs,Conditions} engine bridge  <-- read
-      steps/*.tsx      # StepEvent | StepLocation | StepTarget | StepTravel | StepStyle
-    ResultPanel.tsx    # hero, conditions strip (mode·traffic·weather), stats, chart/map/timeline
-    WaitChart.tsx Timeline.tsx MatchMap.tsx
-  lib/
-    engine/            # THE ALGORITHM (pure TS) — see §5
-      index.ts         #   recommend(stadium, match, trip, prefs, conditions?)  <-- read first
-      curves.ts        #   constants: arrival curve, surge, diurnalTrafficMultiplier, WEATHER_DRIVE_MULT
-      queue.ts         #   crowd + fluid security-queue model (the heart)
-      travel.ts        #   drive = free-flow x surge x baseline x weather; back-solve departure
-      cost.ts optimizer.ts time.ts helpers.ts types.ts
-    data/
-      stadiums.ts matches.ts origins.ts
-scripts/sanity.ts      # engine assertions incl. conditions layer (npm run sanity)
-.env.example           # optional TOMTOM_KEY (app runs without it)
-README.md  docs/SUBMISSION.md  docs/screenshot.png
-```
+**→ Moved to `AGENTS.md` ("File map") — the always-loaded rule set.** It's the
+annotated `src/` tree (orchestrator, API perimeter, onboarding bridge, and the
+`lib/engine/` algorithm files). Read it there for where everything lives.
 
 ## 5. How the algorithm works (4 steps)
 
@@ -100,12 +71,15 @@ README.md  docs/SUBMISSION.md  docs/screenshot.png
    back-solve the "leave by" clock time + timeline + sensitivity.
 
 **Inputs accounted for:** venue (capacity, lanes, throughput, gate-open lead,
-parking/walk) · match (kickoff, round) · you (real origin via geolocation/geocoding,
-target moment, travel mode, chill) · **live conditions** (live/predicted traffic,
-time-of-day baseline, live weather). **Now modeled (this build):** weather, live
-traffic, time-of-day baseline traffic. **Still pending:** transit/rideshare
-*physics* (mode is captured but modeled as car), concessions, roof-aware weather
-(throughput/walk effects).
+parking/walk, **roof**) · match (kickoff, round) · you (real origin via
+geolocation/geocoding, target moment, **travel mode**, chill, **concessions +
+party buffer**) · **live conditions** (live/predicted traffic, time-of-day
+baseline, live weather). **Now modeled (Phase 1 complete):** **full weather**
+(drive + security throughput + walk pace + exposed-idle comfort, roof-gated),
+**real mode physics** (drive / rideshare / transit / walk / bike — each with its
+own surge/parking/weather rules), **parking surge** (search grows toward kickoff),
+and **concessions + party buffer**. **Still pending (Phase 1 candidates, not built):**
+a **confidence band** (P90) and **money** (parking / fare / surge pricing).
 
 ## 6. Data provenance (important, honest)
 
@@ -142,23 +116,11 @@ same way. `src/app/api/*` are the reference implementations.
 
 ## 8. Gotchas already learned (don't repeat)
 
-- **The CLI `chrome --headless --screenshot` lies** on tall pages (shows false
-  horizontal clipping). Use **puppeteer-core against the installed Chrome** to
-  screenshot AND to measure `document.documentElement.scrollWidth` for real overflow.
-- Mobile grids need explicit **`grid-cols-1`** (base) — a grid track with no
-  `grid-cols-*` sizes to `max-content` and won't shrink, causing overflow. Recharts
-  containers also need **`min-w-0`** on the flex/grid parent.
-- Root container uses **`overflow-x-clip`** (not `-hidden`, which breaks the sticky
-  sidebar).
-- Leaflet dark tiles via a CSS `filter` need **`!important`** (`globals.css`).
-- **Next 16 route handlers** are dynamic by default; read query via
-  `request.nextUrl.searchParams` (typed `NextRequest`), return with `Response.json`.
-- **ESLint gotchas:** don't name callbacks `use*` (react-hooks treats them as hooks →
-  `rules-of-hooks`); don't call `setState` synchronously at the top of a `useEffect`
-  (`set-state-in-effect`) — scope state by an id and derive instead.
-- From the scratchpad, `puppeteer-core` won't resolve by bare name — import the
-  absolute path `…/node_modules/puppeteer-core/lib/puppeteer/puppeteer-core.js`.
-  Grant geolocation via `context.overridePermissions` + `page.setGeolocation`.
+**→ Moved to `AGENTS.md` ("Gotchas") — the always-loaded rule set.** Covers:
+headless-screenshot false clipping (use puppeteer-core + `scrollWidth`); mobile
+`grid-cols-1` / Recharts `min-w-0` / root `overflow-x-clip`; Next 16 dynamic route
+handlers; ESLint `use*`/`set-state-in-effect` traps; Leaflet dark-tile
+`!important`.
 
 ## 9. Open action items
 
@@ -166,8 +128,9 @@ same way. `src/app/api/*` are the reference implementations.
    `TOMTOM_KEY` env var there for live traffic — everything else is keyless).
 2. Record demo video (`docs/SUBMISSION.md` storyboard) — lead with the geolocation
    → live route + live weather, then the plan.
-3. Deferred model work (see §5 "still pending"): transit/rideshare *physics*,
-   concessions, roof-aware weather (throughput/walk effects).
+3. Remaining Phase 1 candidates (see §5 / §12): a **confidence band** (P90) and
+   **money** (parking / fare / surge pricing). Then Phase 2 (dashboard exposes the
+   full param set) → Phase 3 (lean onboarding) → Phase 4 (chatbot, §11).
 4. Optional: Groq type-any-venue (§7) · verify/replace real stadium data (§6).
 
 ---
@@ -231,3 +194,56 @@ optional — degrade to the keyless parser). User adds the real key to `.env.loc
 Featherless call → (C) chat UI + wiring → docs. Keyless-first = demoable before the
 key. **Not in scope:** external MCP server, transit/rideshare *physics*, roof-aware
 weather. Full detail: `~/.claude/plans/so-basically-right-now-harmonic-wave.md`.
+
+## 12. Product roadmap — the layered plan (the big picture)
+
+**Organizing principle:** one shared parameter model feeds the engine and *every*
+input surface (`TripPlan` → `planToConditions()` → `recommend()`). Build the params
+once; the sliders, onboarding, and chatbot are all just *views* onto them, so a
+change made anywhere is the same object. **Params must lead** — UI-before-params
+gives cosmetic controls (today's mode label, which changes nothing, is the
+cautionary example).
+
+Four layers, in build order:
+
+**Phase 1 — Model every parameter in the algo (the foundation).** ✅ **DONE.**
+Turned today's cosmetic/half-wired inputs into real ones:
+- **Full weather** — `curves.ts` `WEATHER_EFFECTS` carries four effects per bucket
+  (drive, security `throughput`, `walkPace`, exposed-idle `comfort`); `ROOF_EXPOSURE`
+  gates the *interior* effects (concourse walk + waiting comfort) while the approach
+  walk and outdoor queue stay exposed. Wired through `queue.ts` (throughput → lane
+  rate), `optimizer.ts` (seat-walk + comfort), `cost.ts` (comfort surcharge). All 16
+  venues now carry a real `roofType`.
+- **Real mode physics** — `curves.ts` `MODE_PHYSICS` per mode (drive / rideshare /
+  transit / **walk** / **bike**): pace, road surge/baseline on/off, parking vs
+  drop-off, access/egress, and which weather multiplier hits the leg. `travel.ts`
+  rebuilt around it; selectable in onboarding `StepTravel`.
+- **Parking surge** — `curves.ts` `parkingSurge()` grows the flat `parkingSearchMin`
+  toward kickoff, importance-scaled (was a constant).
+- **Concessions + party buffer** — `Conditions.extras`; both push the optimal gate
+  arrival earlier via `seatedMin`; concessions gets a visible timeline step.
+
+`npm run sanity` grew to 30 checks (all green) covering each of the above;
+`typecheck` / `lint` / `build` green; verified live in-browser (storm now moves the
+drive **and** the security line **and** the crowd-at-kickoff). **Candidate bigger
+adds still open:** a **confidence band** (P90 — the product is a *risk* statement
+but is point-estimate only today) and **money** (parking / fare / surge pricing).
+
+**Phase 2 — Dashboard exposes the full param set** as live controls (an "advanced"
+view; onboarding + chat stay the friendly front doors so 15+ knobs don't
+overwhelm). Live recompute via the existing `useMemo`.
+
+**Phase 3 — Lean onboarding (consent + intent only).** Trim the wizard from 5 steps
+to **3 general questions**: (1) **which match**; (2) **allow live location** — a
+**one-time ping** (`getCurrentPosition`, *not* continuous `watchPosition` tracking)
+to get exact coords for traffic / weather / route, with the address fallback; (3)
+**how you'll get there** (mode). **Target moment + chill are defaulted (Option A:
+kickoff + balanced)** and refined later on the dashboard/chat — *not* asked. Weather,
+traffic, route, drive time and venue specs are all **inferred**, never questions.
+
+**Phase 4 — Chatbot over internal endpoints** (§11) for natural-language tuning and
+**scenario what-ifs** (e.g. "compare drive vs transit," "what if it rains") — the
+forward/compare view on top of the same params.
+
+**Rule of thumb:** onboarding asks only what a machine *can't* know (consent +
+intent); APIs infer the *data*; the dashboard + chat tune the *rich params*.

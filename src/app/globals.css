@@ -17,6 +17,7 @@
   --warn: #ffb020; /* queue building */
   --danger: #ff5d5d; /* miss kickoff */
   --info: #5aa9ff;
+  --food: #c792ea; /* concessions stop */
 }
 
 @theme inline {

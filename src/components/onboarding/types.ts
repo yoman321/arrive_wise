@@ -34,6 +34,10 @@ export interface TripPlan {
   chill: number;
   /** Resolved weather (live or manual). Populated by the weather layer. */
   weather?: WeatherInput;
+  /** Minutes to grab food/drink before settling in (0 = skip). */
+  concessionsMin?: number;
+  /** Quiet buffer for a slower group — kids, stroller, accessibility (0 = none). */
+  partyBufferMin?: number;
 }
 
 /** Props every wizard step body receives. */
@@ -92,5 +96,9 @@ export function planToConditions(
   return {
     baselineTraffic: deriveBaseline(plan.origin),
     weather: weather ?? plan.weather ?? { kind: "clear", source: "manual" },
+    extras: {
+      concessionsMin: plan.concessionsMin ?? 0,
+      partyBufferMin: plan.partyBufferMin ?? 0,
+    },
   };
 }

@@ -37,7 +37,9 @@ export interface CostBreakdown {
 export function evaluateCost(
   seatedMin: number,
   securityWaitMin: number,
-  prefs: Preferences
+  prefs: Preferences,
+  /** Extra cost per minute of early idle time when exposed to bad weather. */
+  comfortWeight = 0
 ): CostBreakdown {
   const target = TARGET_OFFSET_MIN[prefs.target];
   const w = weightsFor(prefs);
@@ -48,7 +50,7 @@ export function evaluateCost(
 
   const cost =
     w.security * securityWaitMin +
-    w.early * earlinessMin +
+    (w.early + comfortWeight) * earlinessMin +
     w.late * latenessMin +
     w.hardKickoff * missedKickoffMin;
 

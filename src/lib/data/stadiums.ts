@@ -1,15 +1,17 @@
 // The 16 FIFA World Cup 2026 host venues.
 //
-// Capacities, coordinates and transit are from public venue information. Entry
-// lanes, per-lane throughput and walk/parking times are planning estimates in
-// the ranges used for large-stadium ingress design (see engine/curves.ts). They
-// are deliberately transparent, tunable parameters — not scraped ground truth.
+// Capacities, coordinates, transit and roof type are from public venue
+// information. Entry lanes, per-lane throughput and walk/parking times are
+// planning estimates in the ranges used for large-stadium ingress design (see
+// engine/curves.ts). They are deliberately transparent, tunable parameters — not
+// scraped ground truth.
 
 import type { Stadium } from "../engine/types";
 
 export const STADIUMS: Stadium[] = [
   {
     id: "metlife",
+    roofType: "open",
     name: "MetLife Stadium",
     city: "New York / New Jersey",
     country: "USA",
@@ -26,6 +28,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "att",
+    roofType: "retractable",
     name: "AT&T Stadium",
     city: "Dallas",
     country: "USA",
@@ -42,6 +45,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "sofi",
+    roofType: "dome",
     name: "SoFi Stadium",
     city: "Los Angeles",
     country: "USA",
@@ -58,6 +62,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "levis",
+    roofType: "open",
     name: "Levi's Stadium",
     city: "San Francisco Bay Area",
     country: "USA",
@@ -74,6 +79,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "lumen",
+    roofType: "open",
     name: "Lumen Field",
     city: "Seattle",
     country: "USA",
@@ -90,6 +96,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "arrowhead",
+    roofType: "open",
     name: "Arrowhead Stadium",
     city: "Kansas City",
     country: "USA",
@@ -106,6 +113,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "nrg",
+    roofType: "retractable",
     name: "NRG Stadium",
     city: "Houston",
     country: "USA",
@@ -122,6 +130,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "mercedes",
+    roofType: "retractable",
     name: "Mercedes-Benz Stadium",
     city: "Atlanta",
     country: "USA",
@@ -138,6 +147,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "hardrock",
+    roofType: "open",
     name: "Hard Rock Stadium",
     city: "Miami",
     country: "USA",
@@ -154,6 +164,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "gillette",
+    roofType: "open",
     name: "Gillette Stadium",
     city: "Boston",
     country: "USA",
@@ -170,6 +181,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "linc",
+    roofType: "open",
     name: "Lincoln Financial Field",
     city: "Philadelphia",
     country: "USA",
@@ -186,6 +198,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "bmo",
+    roofType: "open",
     name: "BMO Field",
     city: "Toronto",
     country: "Canada",
@@ -202,6 +215,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "bcplace",
+    roofType: "retractable",
     name: "BC Place",
     city: "Vancouver",
     country: "Canada",
@@ -218,6 +232,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "azteca",
+    roofType: "open",
     name: "Estadio Azteca",
     city: "Mexico City",
     country: "Mexico",
@@ -234,6 +249,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "akron",
+    roofType: "open",
     name: "Estadio Akron",
     city: "Guadalajara",
     country: "Mexico",
@@ -250,6 +266,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "bbva",
+    roofType: "open",
     name: "Estadio BBVA",
     city: "Monterrey",
     country: "Mexico",

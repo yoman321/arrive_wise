@@ -7,6 +7,7 @@ const DOT: Record<string, string> = {
   leave: "var(--info)",
   arrive_lot: "var(--info)",
   through_gate: "var(--warn)",
+  concessions: "var(--food)",
   seated: "var(--accent)",
   kickoff: "var(--danger)",
 };

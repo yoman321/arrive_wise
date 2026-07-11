@@ -26,10 +26,11 @@ export interface Stadium {
   /** Whether decent public transit exists (affects surge, informational). */
   hasTransit: boolean;
   /**
-   * Roof configuration. Gates how much weather bites (an open bowl is fully
-   * exposed; a dome shrugs it off). Optional for now — the roof-aware weather
-   * refinement (throughput/walk effects) is a follow-up; today only the drive
-   * exposure uses it lightly. Defaults to "open" when absent.
+   * Roof configuration. Gates how much weather bites the *interior* legs (the
+   * concourse walk to the seat, and the comfort of waiting around early): an open
+   * bowl is fully exposed, a dome shrugs it off, a retractable roof is assumed
+   * closed in bad weather. The approach walk and outdoor security queue stay
+   * exposed regardless. Defaults to "open" when absent.
    */
   roofType?: RoofType;
 }
@@ -76,12 +77,12 @@ export interface TripInput {
   liveDriveMin?: number;
   /** Where the drive number came from (for provenance + UI badges). */
   trafficSource?: TrafficSource;
-  /** How the fan is travelling. Captured now; deep mode physics is a follow-up. */
+  /** How the fan is travelling. Drives real per-mode physics (see `MODE_PHYSICS`). */
   mode?: TravelMode;
 }
 
-/** How the fan is getting to the venue. */
-export type TravelMode = "drive" | "transit" | "rideshare";
+/** How the fan is getting to the venue. Each mode has its own travel physics. */
+export type TravelMode = "drive" | "transit" | "rideshare" | "walk" | "bike";
 
 /** Coarse weather bucket driving a light drive-time effect (deep effects are a follow-up). */
 export type WeatherKind = "clear" | "rain" | "heat" | "cold" | "wind" | "storm";
@@ -117,11 +118,19 @@ export interface Conditions {
    */
   baselineTraffic: { source: "auto" | "live" | "estimate"; mult: number };
   weather: WeatherInput;
+  /**
+   * Additive time buffers that shift the *optimal gate arrival earlier* because
+   * they push the seated moment later (they enter cost via `seatedMin`):
+   *   concessionsMin  — grabbing food/drink before settling in (visible timeline step).
+   *   partyBufferMin  — a slower group (kids, stroller, accessibility): a quiet pad.
+   */
+  extras: { concessionsMin: number; partyBufferMin: number };
 }
 
 export const DEFAULT_CONDITIONS: Conditions = {
   baselineTraffic: { source: "auto", mult: 1 },
   weather: { kind: "clear", source: "manual" },
+  extras: { concessionsMin: 0, partyBufferMin: 0 },
 };
 
 /** Multiplicative breakdown of the experienced drive time, for transparency. */
@@ -182,7 +191,13 @@ export interface Recommendation {
 }
 
 export interface TimelineStep {
-  key: "leave" | "arrive_lot" | "through_gate" | "seated" | "kickoff";
+  key:
+    | "leave"
+    | "arrive_lot"
+    | "through_gate"
+    | "concessions"
+    | "seated"
+    | "kickoff";
   label: string;
   clock: string;
   /** minutes relative to kickoff */

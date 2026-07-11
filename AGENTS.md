@@ -3,3 +3,91 @@
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
+
+# ArriveWise — project rules
+
+ArriveWise tells a fan the smartest time to leave home for a big event: as late as
+comfortably possible while beating the security-line surge and still catching the
+moment they care about (warmups / anthems / kickoff). Built for **United Hacks V7**,
+showcased on **FIFA World Cup 2026** / its 16 host stadiums — but the engine is
+event-agnostic. `SUMMARY.md` holds the full context, current status and roadmap;
+read it for the "why" and what's next. This file is the always-on rule set.
+
+## Architecture (respect these)
+
+- **Algorithm at the core, data/LLM at the perimeter.** The recommendation engine
+  (`src/lib/engine/`, pure client-side TypeScript) is **deterministic and never
+  fetches**. Live data — geocode, routing, weather, and any future LLM — enters
+  *only* through thin Next.js route handlers in `src/app/api/*`, and **each source
+  has a deterministic fallback** so the demo never depends on a key, permission, or
+  network.
+- **One shared parameter model.** `TripPlan` → `planToConditions()` → `recommend()`.
+  The dashboard sliders, onboarding wizard and chat are all just *views* onto the
+  same params — **model a parameter in the engine before adding UI for it** (a
+  cosmetic control that changes no number is the anti-pattern to avoid).
+- **No paid dependency required.** Nominatim (geocode), OSRM (routing) and
+  Open-Meteo (weather) are keyless. `TOMTOM_KEY` is the *only* key, is **optional**
+  (live/predicted traffic), server-side only, and is never exposed to the browser.
+- **Stack:** Next.js 16 (App Router) + TypeScript + Tailwind v4. Charts: **Recharts**.
+  Map: **Leaflet + OpenStreetMap** (keyless). Theme: committed **dark**
+  (`src/app/globals.css`). Static data is hand-authored in `src/lib/data/`.
+
+## File map (where everything is)
+
+```
+src/
+  app/
+    page.tsx           # orchestrator: onboarding <-> dashboard; fetches live weather
+    api/
+      geocode/route.ts # Nominatim proxy (address -> coords)
+      route/route.ts   # drive time: TomTom -> OSRM -> haversine estimate
+      weather/route.ts # Open-Meteo venue forecast -> WeatherKind
+    layout.tsx globals.css
+  components/
+    onboarding/
+      Onboarding.tsx   # 5-step wizard shell (progress, Back/Next, validation)
+      types.ts         # TripPlan + planTo{Trip,Prefs,Conditions} engine bridge  <-- read
+      steps/*.tsx      # StepEvent | StepLocation | StepTarget | StepTravel | StepStyle
+    ResultPanel.tsx    # hero, conditions strip (mode·traffic·weather), stats, chart/map/timeline
+    WaitChart.tsx Timeline.tsx MatchMap.tsx
+  lib/
+    engine/            # THE ALGORITHM (pure TS) — see SUMMARY.md §5
+      index.ts         #   recommend(stadium, match, trip, prefs, conditions?)  <-- read first
+      curves.ts        #   constants: arrival/surge/diurnal curves, WEATHER_EFFECTS, parkingSurge, MODE_PHYSICS
+      queue.ts         #   crowd + fluid security-queue model (the heart)
+      travel.ts        #   per-mode travel physics; back-solve departure from gate arrival
+      cost.ts optimizer.ts time.ts helpers.ts types.ts
+    data/
+      stadiums.ts matches.ts origins.ts
+scripts/sanity.ts      # engine assertions incl. conditions layer (npm run sanity)
+.env.example           # optional TOMTOM_KEY (app runs without it)
+README.md  docs/SUBMISSION.md  docs/screenshot.png
+```
+
+## Always verify before claiming done
+
+```bash
+npm run sanity     # engine assertions (headless, no UI)
+npm run typecheck  # tsc --noEmit
+npm run lint
+npm run build      # what Vercel runs — must pass
+```
+
+## Gotchas (don't repeat)
+
+- **Screenshots lie:** the CLI `chrome --headless --screenshot` shows false
+  horizontal clipping on tall pages. Use **puppeteer-core against the installed
+  Chrome**, and measure `document.documentElement.scrollWidth` for real overflow.
+  From the scratchpad, `puppeteer-core` won't resolve by bare name — import the
+  absolute path `…/node_modules/puppeteer-core/lib/puppeteer/puppeteer-core.js`;
+  grant geolocation via `context.overridePermissions` + `page.setGeolocation`.
+- **Mobile overflow:** grids need an explicit **`grid-cols-1`** at the base (a track
+  with no `grid-cols-*` sizes to `max-content` and won't shrink); Recharts
+  containers need **`min-w-0`** on the flex/grid parent. The root container uses
+  **`overflow-x-clip`** (not `-hidden`, which breaks the sticky sidebar).
+- **Next 16 route handlers** are dynamic by default; read query via
+  `request.nextUrl.searchParams` (typed `NextRequest`), return with `Response.json`.
+- **ESLint:** don't name callbacks `use*` (react-hooks treats them as hooks →
+  `rules-of-hooks`); don't call `setState` synchronously at the top of a `useEffect`
+  (`set-state-in-effect`) — scope state by an id and derive instead.
+- **Leaflet** dark tiles via a CSS `filter` need `!important` (`globals.css`).

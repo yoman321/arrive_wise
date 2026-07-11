@@ -30,11 +30,17 @@ export interface QueueModel {
   attendance: number;
 }
 
-export function buildQueueModel(stadium: Stadium, match: Match): QueueModel {
+export function buildQueueModel(
+  stadium: Stadium,
+  match: Match,
+  /** Weather (or other) throughput multiplier on the lane rate; 1 = nominal. */
+  throughputMult = 1
+): QueueModel {
   const attendance = Math.round(
     stadium.capacity * ATTENDANCE_FRACTION[match.round]
   );
-  const capacityPerMin = stadium.entryLanes * stadium.laneRatePerMin;
+  const capacityPerMin =
+    stadium.entryLanes * stadium.laneRatePerMin * Math.max(0.3, throughputMult);
 
   const startMin = -stadium.gatesOpenLeadMin;
   const endMin = ARRIVAL_LATE_TAIL_MIN;

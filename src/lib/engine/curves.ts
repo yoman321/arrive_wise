@@ -12,7 +12,17 @@
 //    a surge multiplier on free-flow drive time that grows toward kickoff and is
 //    scaled by expected attendance / match importance.
 
-import type { Round, TargetMoment, WeatherKind } from "./types";
+import type {
+  RoofType,
+  Round,
+  TargetMoment,
+  TravelMode,
+  WeatherKind,
+} from "./types";
+
+function clamp01(x: number): number {
+  return Math.min(1, Math.max(0, x));
+}
 
 /** Centre of the crowd gate-arrival distribution, minutes before kickoff. */
 export const ARRIVAL_PEAK_MIN = -32;
@@ -97,16 +107,152 @@ export function diurnalTrafficMultiplier(
 }
 
 /**
- * Light weather effect on drive time. Precipitation/wind slow traffic; heat/cold
- * are milder. The deeper effects (security throughput, walking pace, "get under
- * cover" urgency, roof gating) are a documented follow-up — this keeps weather
- * visible in the plan today without overclaiming.
+ * Match-day parking-search multiplier applied to a venue's flat `parkingSearchMin`.
+ * Lots fill as kickoff nears, so circling for a spot gets worse the later (closer
+ * to kickoff) you arrive. Peaks just before kickoff and is scaled by match
+ * importance, mirroring the traffic surge — parking is congestion too.
+ * `arriveMin` is when you reach the lot (min rel. kickoff, usually negative).
  */
-export const WEATHER_DRIVE_MULT: Record<WeatherKind, number> = {
-  clear: 1.0,
-  heat: 1.03,
-  cold: 1.05,
-  wind: 1.08,
-  rain: 1.15,
-  storm: 1.28,
+export function parkingSurge(arriveMin: number, roundWeight: number): number {
+  const peak = 0.7 * roundWeight; // up to ~+98% search time for a final
+  const bump = peak * Math.exp(-0.5 * Math.pow((arriveMin + 8) / 38, 2));
+  return 1 + Math.max(0, bump);
+}
+
+/**
+ * Full weather model. Each bucket carries four independent effects so weather
+ * genuinely moves the plan (not just the drive):
+ *   drive      — multiplier on a vehicle leg's minutes (road modes).
+ *   throughput — multiplier on security lane rate (wet hands, gloves, umbrellas,
+ *                heavier bag checks slow screening).
+ *   walkPace   — multiplier on walking minutes when fully exposed.
+ *   comfort    — extra cost per minute of *early idle time* spent exposed (waiting
+ *                around in bad weather is unpleasant; a roof erases most of it).
+ */
+export interface WeatherEffect {
+  drive: number;
+  throughput: number;
+  walkPace: number;
+  comfort: number;
+}
+
+export const WEATHER_EFFECTS: Record<WeatherKind, WeatherEffect> = {
+  clear: { drive: 1.0, throughput: 1.0, walkPace: 1.0, comfort: 0.0 },
+  heat: { drive: 1.03, throughput: 0.98, walkPace: 1.05, comfort: 0.22 },
+  cold: { drive: 1.05, throughput: 0.95, walkPace: 1.06, comfort: 0.18 },
+  wind: { drive: 1.08, throughput: 0.96, walkPace: 1.08, comfort: 0.15 },
+  rain: { drive: 1.15, throughput: 0.9, walkPace: 1.12, comfort: 0.3 },
+  storm: { drive: 1.28, throughput: 0.82, walkPace: 1.2, comfort: 0.45 },
+};
+
+/** Back-compat alias: the drive-leg multiplier only. */
+export const WEATHER_DRIVE_MULT: Record<WeatherKind, number> = Object.fromEntries(
+  (Object.entries(WEATHER_EFFECTS) as [WeatherKind, WeatherEffect][]).map(
+    ([k, v]) => [k, v.drive]
+  )
+) as Record<WeatherKind, number>;
+
+/**
+ * How exposed a fan is to weather *inside the venue envelope*, by roof. This gates
+ * the interior effects — the concourse walk to the seat and the comfort of waiting
+ * around early. The approach walk (parking lot → gate) and the outdoor security
+ * queue happen outside the roof and stay fully exposed regardless. Absent roof
+ * data defaults to a fully open bowl.
+ */
+export const ROOF_EXPOSURE: Record<RoofType, number> = {
+  open: 1,
+  retractable: 0.4, // assumed closed when the weather is bad
+  dome: 0.15,
+};
+
+export function roofExposure(roof: RoofType | undefined): number {
+  return ROOF_EXPOSURE[roof ?? "open"];
+}
+
+/** Walking-minute multiplier for a given exposure (0 = fully sheltered, 1 = open). */
+export function weatherWalkMult(kind: WeatherKind, exposure = 1): number {
+  return 1 + (WEATHER_EFFECTS[kind].walkPace - 1) * clamp01(exposure);
+}
+
+/** Security-lane throughput multiplier — screening is at the outdoor perimeter, so
+ * roof doesn't shelter it. */
+export function weatherThroughputMult(kind: WeatherKind): number {
+  return WEATHER_EFFECTS[kind].throughput;
+}
+
+/** Extra comfort cost per minute of exposed early idle time, gated by roof. */
+export function weatherComfortCost(kind: WeatherKind, exposure = 1): number {
+  return WEATHER_EFFECTS[kind].comfort * clamp01(exposure);
+}
+
+/**
+ * Per-mode travel physics. The engine chain is shared; a mode reshapes which parts
+ * of it bite:
+ *   paceMult          — the free-flow leg scales this (transit/walk/bike are slower
+ *                       door-to-door than the driving estimate).
+ *   roadSurge/Baseline— whether match-day surge and ambient road congestion apply
+ *                       (a train has its own right-of-way; a bike lane-splits).
+ *   parking           — whether you hunt for a spot (flat search × parking surge).
+ *   accessEgressMin   — fixed near-venue transfer: station↔gate + headway, drop-off
+ *                       queue, bike lock-up.
+ *   accessEgressSurges— whether that transfer grows toward kickoff (rideshare
+ *                       drop-off zones jam like parking lots do).
+ *   legWeather        — which weather multiplier hits the travel leg itself.
+ */
+export interface ModePhysics {
+  paceMult: number;
+  roadSurge: boolean;
+  roadBaseline: boolean;
+  parking: boolean;
+  accessEgressMin: number;
+  accessEgressSurges: boolean;
+  legWeather: "drive" | "walk" | "none";
+}
+
+export const MODE_PHYSICS: Record<TravelMode, ModePhysics> = {
+  drive: {
+    paceMult: 1.0,
+    roadSurge: true,
+    roadBaseline: true,
+    parking: true,
+    accessEgressMin: 0,
+    accessEgressSurges: false,
+    legWeather: "drive",
+  },
+  rideshare: {
+    paceMult: 1.0,
+    roadSurge: true,
+    roadBaseline: true,
+    parking: false,
+    accessEgressMin: 6, // drop-off zone
+    accessEgressSurges: true,
+    legWeather: "drive",
+  },
+  transit: {
+    paceMult: 1.35, // door-to-door transit is slower than the drive estimate
+    roadSurge: false,
+    roadBaseline: false,
+    parking: false,
+    accessEgressMin: 8, // station↔gate walk + headway buffer
+    accessEgressSurges: false,
+    legWeather: "none", // you're inside the vehicle
+  },
+  walk: {
+    paceMult: 4.0, // walking covers the drive distance far slower
+    roadSurge: false,
+    roadBaseline: false,
+    parking: false,
+    accessEgressMin: 0,
+    accessEgressSurges: false,
+    legWeather: "walk",
+  },
+  bike: {
+    paceMult: 2.2,
+    roadSurge: false,
+    roadBaseline: false,
+    parking: false,
+    accessEgressMin: 2, // lock-up
+    accessEgressSurges: false,
+    legWeather: "walk",
+  },
 };

@@ -18,11 +18,43 @@ import WaitChart from "./WaitChart";
 
 const MODE_META: Record<
   TravelMode,
-  { icon: string; label: string; verb: (d: string) => string }
+  { icon: string; label: string; timeLabel: string; road: boolean; verb: (d: string) => string }
 > = {
-  drive: { icon: "🚗", label: "Drive", verb: (d) => `drive ${d} through match-day traffic` },
-  transit: { icon: "🚆", label: "Transit", verb: (d) => `travel ${d} in on transit` },
-  rideshare: { icon: "🚕", label: "Rideshare", verb: (d) => `ride ${d} through match-day traffic` },
+  drive: {
+    icon: "🚗",
+    label: "Drive",
+    timeLabel: "Drive time",
+    road: true,
+    verb: (d) => `drive ${d} through match-day traffic`,
+  },
+  transit: {
+    icon: "🚆",
+    label: "Transit",
+    timeLabel: "Transit time",
+    road: false,
+    verb: (d) => `ride transit ${d} in`,
+  },
+  rideshare: {
+    icon: "🚕",
+    label: "Rideshare",
+    timeLabel: "Ride time",
+    road: true,
+    verb: (d) => `ride ${d} through match-day traffic`,
+  },
+  walk: {
+    icon: "🚶",
+    label: "Walk",
+    timeLabel: "Walk time",
+    road: false,
+    verb: (d) => `walk ${d} to the gate`,
+  },
+  bike: {
+    icon: "🚲",
+    label: "Bike",
+    timeLabel: "Bike time",
+    road: false,
+    verb: (d) => `bike ${d} to the gate`,
+  },
 };
 
 const WEATHER_META: Record<WeatherKind, { icon: string; label: string }> = {
@@ -104,6 +136,10 @@ export default function ResultPanel({
   const stadium = STADIUM_BY_ID[match.stadiumId];
   const driveDur = fmtDuration(rec.driveMin);
   const curWeather = weather?.kind ?? "clear";
+  const meta = MODE_META[mode];
+  // Look the seated step up by key — an optional concessions step can shift it.
+  const seatedStep =
+    rec.timeline.find((s) => s.key === "seated") ?? rec.timeline[rec.timeline.length - 2];
 
   return (
     <div className="space-y-5">
@@ -151,14 +187,21 @@ export default function ResultPanel({
             {fmtDuration(rec.securityWaitMin)}
           </b>
           , and settle into your seat at{" "}
-          <b className="text-accent">{rec.timeline[3].clock}</b>.
+          <b className="text-accent">{seatedStep.clock}</b>.
         </p>
-        <p className="mt-2 text-xs text-faint">
-          Drive = free-flow × {rec.drive.surge.toFixed(2)} surge ×{" "}
-          {rec.drive.baseline.toFixed(2)}{" "}
-          {rec.baselineSource === "live" ? "live traffic" : "time-of-day"} ×{" "}
-          {rec.drive.weather.toFixed(2)} weather
-        </p>
+        {meta.road ? (
+          <p className="mt-2 text-xs text-faint">
+            Drive = free-flow × {rec.drive.surge.toFixed(2)} surge ×{" "}
+            {rec.drive.baseline.toFixed(2)}{" "}
+            {rec.baselineSource === "live" ? "live traffic" : "time-of-day"} ×{" "}
+            {rec.drive.weather.toFixed(2)} weather
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-faint">
+            {meta.label} skips match-day road surge and parking — the plan hinges on
+            the security line and your walk in.
+          </p>
+        )}
       </div>
 
       {/* Conditions strip: mode · traffic provenance · interactive weather */}
@@ -197,10 +240,14 @@ export default function ResultPanel({
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat
-          label="Drive time"
+          label={meta.timeLabel}
           value={fmtDuration(rec.driveMin)}
           tone="info"
-          sub={`×${rec.drive.total.toFixed(2)} vs free-flow`}
+          sub={
+            meta.road
+              ? `×${rec.drive.total.toFixed(2)} vs free-flow`
+              : `${meta.label.toLowerCase()} leg`
+          }
         />
         <Stat
           label="Security line"
@@ -210,7 +257,7 @@ export default function ResultPanel({
         />
         <Stat
           label="Seated"
-          value={rec.timeline[3].clock}
+          value={seatedStep.clock}
           tone="accent"
           sub={`${late ? "" : "+"}${cushion}m vs ${prefs.target}`}
         />
@@ -289,6 +336,12 @@ export default function ResultPanel({
                 className={`font-medium ${stadium.hasTransit ? "text-accent" : "text-faint"}`}
               >
                 {stadium.hasTransit ? "Available" : "Limited"}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-muted">Roof</dt>
+              <dd className="font-medium capitalize text-text">
+                {stadium.roofType ?? "open"}
               </dd>
             </div>
           </dl>

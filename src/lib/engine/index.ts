@@ -13,7 +13,7 @@ import type {
 import { DEFAULT_CONDITIONS } from "./types";
 import { optimize } from "./optimizer";
 import { travelForGateArrival } from "./travel";
-import { seatedForExport } from "./helpers";
+import { computeSeated } from "./helpers";
 import { TARGET_OFFSET_MIN } from "./curves";
 import { offsetToClock } from "./time";
 
@@ -28,8 +28,25 @@ export function recommend(
   prefs: Preferences,
   conditions: Conditions = DEFAULT_CONDITIONS
 ): Recommendation {
-  const { best, curve, queue } = optimize(stadium, match, trip, prefs, conditions);
+  const { best, curve, queue, seatedOpts } = optimize(
+    stadium,
+    match,
+    trip,
+    prefs,
+    conditions
+  );
   const target = TARGET_OFFSET_MIN[prefs.target];
+  const throughGateMin = best.gateArrivalMin + best.securityWaitMin;
+
+  const mode = trip.mode ?? "drive";
+  const lotLabel =
+    mode === "transit"
+      ? "Arrive at station"
+      : mode === "rideshare"
+        ? "Drop-off"
+        : mode === "walk" || mode === "bike"
+          ? "Reach the venue"
+          : "Arrive & park";
 
   const timeline: TimelineStep[] = [
     {
@@ -40,19 +57,31 @@ export function recommend(
     },
     {
       key: "arrive_lot",
-      label: "Arrive & park",
+      label: lotLabel,
       min: best.lotArrivalMin,
       clock: offsetToClock(match.kickoff, best.lotArrivalMin),
     },
     {
       key: "through_gate",
       label: "Through security",
-      min: best.gateArrivalMin + best.securityWaitMin,
-      clock: offsetToClock(
-        match.kickoff,
-        best.gateArrivalMin + best.securityWaitMin
-      ),
+      min: throughGateMin,
+      clock: offsetToClock(match.kickoff, throughGateMin),
     },
+  ];
+
+  // Grabbing food gets its own visible step, between clearing security and
+  // settling in. The party buffer stays a quiet pad folded into "seated".
+  const concessionsMin = conditions.extras.concessionsMin;
+  if (concessionsMin > 0) {
+    timeline.push({
+      key: "concessions",
+      label: "Grab food & drink",
+      min: throughGateMin + concessionsMin,
+      clock: offsetToClock(match.kickoff, throughGateMin + concessionsMin),
+    });
+  }
+
+  timeline.push(
     {
       key: "seated",
       label: "In your seat",
@@ -64,13 +93,13 @@ export function recommend(
       label: "Kickoff",
       min: 0,
       clock: offsetToClock(match.kickoff, 0),
-    },
-  ];
+    }
+  );
 
   // Sensitivity: what if you left 20 min later (arrive at gate 20 min later)?
   const laterBy = 20;
   const laterGate = best.gateArrivalMin + laterBy;
-  const later = seatedForExport(laterGate, queue, stadium);
+  const later = computeSeated(laterGate, queue, stadium, seatedOpts);
   const sensitivity = {
     laterByMin: laterBy,
     extraWaitMin: Math.max(0, later.securityWaitMin - best.securityWaitMin),
