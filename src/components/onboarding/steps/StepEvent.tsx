@@ -24,7 +24,7 @@ export default function StepEvent({ plan, update }: StepProps) {
               <span className="text-sm font-semibold text-text">
                 {matchTitle(m)}
               </span>
-              <span className="chip px-2 py-0.5 text-[10px] text-accent">
+              <span className="chip shrink-0 whitespace-nowrap px-2 py-0.5 text-[10px] text-accent">
                 {ROUND_LABEL[m.round]}
               </span>
             </div>

@@ -8,13 +8,13 @@ import type {
   TrafficSource,
   TravelMode,
   WeatherInput,
-  WeatherKind,
 } from "@/lib/engine/types";
 import { fmtDuration, TARGET_LABEL } from "@/lib/engine";
 import { matchTitle } from "@/lib/ui";
 import { STADIUM_BY_ID } from "@/lib/data/stadiums";
 import Timeline from "./Timeline";
 import WaitChart from "./WaitChart";
+import { WEATHER_META } from "./WeatherPicker";
 
 const MODE_META: Record<
   TravelMode,
@@ -55,15 +55,6 @@ const MODE_META: Record<
     road: false,
     verb: (d) => `bike ${d} to the gate`,
   },
-};
-
-const WEATHER_META: Record<WeatherKind, { icon: string; label: string }> = {
-  clear: { icon: "☀️", label: "Clear" },
-  rain: { icon: "🌧️", label: "Rain" },
-  heat: { icon: "🔥", label: "Heat" },
-  cold: { icon: "❄️", label: "Cold" },
-  wind: { icon: "💨", label: "Wind" },
-  storm: { icon: "⛈️", label: "Storm" },
 };
 
 const TRAFFIC_LABEL: Record<TrafficSource, string> = {
@@ -121,14 +112,16 @@ export default function ResultPanel({
   prefs,
   mode,
   weather,
-  onWeather,
+  variant = "full",
 }: {
   rec: Recommendation;
   match: Match;
   prefs: Preferences;
   mode: TravelMode;
   weather?: WeatherInput;
-  onWeather: (kind: WeatherKind) => void;
+  /** "main" = hero…timeline (fills the results column); "venue" = map + specs +
+   * sensitivity (a full-width section below the fold); "full" = everything. */
+  variant?: "main" | "venue" | "full";
 }) {
   const cushion = Math.round(rec.cushionMin);
   const late = cushion < 0;
@@ -142,9 +135,11 @@ export default function ResultPanel({
     rec.timeline.find((s) => s.key === "seated") ?? rec.timeline[rec.timeline.length - 2];
 
   return (
-    <div className="space-y-5">
+    <div className={variant === "main" ? "flex h-full flex-col gap-4" : "space-y-4"}>
+      {variant !== "venue" && (
+        <>
       {/* Hero */}
-      <div className="card fade-up overflow-hidden p-6" key={rec.leaveByClock + prefs.target}>
+      <div className="card fade-up overflow-hidden p-5" key={rec.leaveByClock + prefs.target}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-widest text-accent">
@@ -204,7 +199,7 @@ export default function ResultPanel({
         )}
       </div>
 
-      {/* Conditions strip: mode · traffic provenance · interactive weather */}
+      {/* Conditions strip: mode · traffic provenance · weather (set on the tune page) */}
       <div className="card flex flex-wrap items-center gap-2 p-4 text-xs">
         <span className="chip px-2.5 py-1 text-muted">
           {MODE_META[mode].icon} {MODE_META[mode].label}
@@ -213,24 +208,12 @@ export default function ResultPanel({
           🛣 {TRAFFIC_LABEL[rec.trafficSource]}
         </span>
         <span className="ml-auto flex items-center gap-1.5">
-          <span className="text-faint">
-            Weather
+          <span className="chip px-2.5 py-1 text-muted">
+            {WEATHER_META[curWeather].icon} {WEATHER_META[curWeather].label}
             {weather?.source === "live" && weather.tempC != null
               ? ` · ${weather.tempC}°C`
               : ""}
-            :
           </span>
-          {(Object.keys(WEATHER_META) as WeatherKind[]).map((k) => (
-            <button
-              key={k}
-              onClick={() => onWeather(k)}
-              data-active={curWeather === k}
-              title={WEATHER_META[k].label}
-              className="seg-btn rounded-lg px-2 py-1 text-sm leading-none"
-            >
-              {WEATHER_META[k].icon}
-            </button>
-          ))}
           {weather?.source === "live" && (
             <span className="chip px-2 py-0.5 text-[10px] text-accent">live</span>
           )}
@@ -276,7 +259,11 @@ export default function ResultPanel({
       </div>
 
       {/* Chart + timeline */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+      <div
+        className={`grid grid-cols-1 gap-4 lg:grid-cols-5 ${
+          variant === "main" ? "lg:min-h-0 lg:flex-1" : ""
+        }`}
+      >
         <div className="card min-w-0 p-5 lg:col-span-3">
           <div className="mb-1 flex items-baseline justify-between">
             <h3 className="text-sm font-semibold text-text">
@@ -296,11 +283,15 @@ export default function ResultPanel({
           <Timeline rec={rec} />
         </div>
       </div>
+        </>
+      )}
 
+      {variant !== "main" && (
+        <>
       {/* Venue */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="card min-w-0 overflow-hidden lg:col-span-3">
-          <div className="h-56 w-full">
+          <div className="h-44 w-full">
             <MatchMap stadium={stadium} />
           </div>
         </div>
@@ -375,6 +366,8 @@ export default function ResultPanel({
           for {targetLabel}.
         </span>
       </div>
+        </>
+      )}
     </div>
   );
 }

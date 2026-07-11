@@ -12,6 +12,11 @@ import {
   weatherWalkMult,
   ROUND_SURGE_WEIGHT,
 } from "../src/lib/engine/curves";
+import {
+  estimateFoodCost,
+  foodBasketFor,
+  foodRatePerMin,
+} from "../src/lib/engine/money";
 import type { Conditions, Preferences, TripInput } from "../src/lib/engine/types";
 
 /** Build a Conditions with clear weather and given extras/weather overrides. */
@@ -325,6 +330,31 @@ check(
   "grabbing food adds a cost to an otherwise-free walk",
   walkFood.usd > 0 && walkFood.lines.some((l) => /food/i.test(l.label)),
   `walk+food ${walkFood.usd}`
+);
+
+// Food tiers: per-venue basket drives the food-budget rate.
+const premiumV = STADIUM_BY_ID["metlife"]; // premium US
+const valueV = STADIUM_BY_ID["mercedes"]; // value US (fan-friendly pricing)
+const mexV = STADIUM_BY_ID["azteca"]; // standard Mexico
+check(
+  "premium venue food rate beats a value venue in the same region",
+  foodRatePerMin(premiumV) > foodRatePerMin(valueV),
+  `${foodRatePerMin(premiumV)} vs ${foodRatePerMin(valueV)}`
+);
+check(
+  "same food dwell costs more at the premium venue",
+  estimateFoodCost(20, premiumV) > estimateFoodCost(20, valueV),
+  `${estimateFoodCost(20, premiumV)} vs ${estimateFoodCost(20, valueV)}`
+);
+check(
+  "Mexican venue is cheaper than a US premium venue",
+  foodRatePerMin(mexV) < foodRatePerMin(premiumV),
+  `${foodRatePerMin(mexV)} vs ${foodRatePerMin(premiumV)}`
+);
+check(
+  "basket items follow the venue region (US beer vs Mexican cerveza)",
+  foodBasketFor(premiumV).some((i) => /beer/i.test(i.name)) &&
+    foodBasketFor(mexV).some((i) => /cerveza/i.test(i.name))
 );
 
 // Round trip: doubles travel-variable spend (transit fare, gas) but not parking.

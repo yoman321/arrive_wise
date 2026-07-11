@@ -93,7 +93,10 @@ research-informed parameters.
 venue forecast for the match date/hour (keyless; manual selector fallback);
 **routing** = a real route to the venue (TomTom live/predicted traffic **if a key is
 set**, else OSRM real route *free-flow only*, else a distance estimate — the badge
-says which); **origin** = your actual coordinates via Geolocation/Nominatim. Travel
+says which); **origin** = your actual coordinates via Geolocation/Nominatim;
+**venue food outlets** = real named restaurants/bars/shops at the venue from OSM via
+Overpass (keyless, mirror-failover; a typical-outlets list is the fallback). Concession
+*prices* stay hand-authored (real per-item menus aren't publicly fetchable). Travel
 mode and roof types are transparent inputs. The *recommendation* is computed live,
 never stored.
 
@@ -242,24 +245,46 @@ stat on the result panel. `recommend()` returns `cost` + `costByMode`; sanity gr
 9 money checks. A live pricing source could later replace any line at the perimeter
 with this as the fallback.
 
+**Per-venue food pricing — ✅ DONE (added post-money-layer).** The flat per-country
+`foodUsdPerMin` is replaced by a per-venue **concession basket**: region-appropriate
+items (US beer/hot dog · Canada poutine · Mexico cerveza/tacos) priced off a baseline
+scaled by each venue's `foodTier` (`value | standard | premium`, e.g. Mercedes-Benz
+Atlanta = value for its fan-friendly pricing, MetLife/SoFi = premium). The basket is
+the single source: `foodBasketFor()` → `foodRatePerMin()` → `estimateFoodCost()`, so
+the on-screen menu and the budget number always agree (params lead UI). Surfaced in a
+new **"What's at the venue"** dashboard card (`VenueFood.tsx`) that also lists the
+venue's **real outlets** live from OSM Overpass (`/api/venue-food`). Sanity grew by 4
+food-tier checks (premium > value rate; region-correct items).
+
 **Next steps (open):**
 - **Food: decouple time from cost (roadmap).** *Time to get food* and *cost of food*
   are two different things, but today a single control — the concessions **minutes**
-  slider — drives both (the timeline stop and the `~$` budget line via
-  `foodUsdPerMin`). In reality they're independent: a $40 beer-and-dog round can take
+  slider — drives both (the timeline stop and the `~$` budget line via the venue's
+  `foodRatePerMin`). In reality they're independent: a $40 beer-and-dog round can take
   3 minutes, and lingering 20 minutes might cost nothing. Roadmap item: split them
   into separate params — a concessions **dwell time** and a **food spend** (its own
-  control / tier), so each moves the plan on its own axis — and then scale the spend
-  by **party size** (a family's round is 4×).
+  control / tier, now that the per-venue basket exists to price it), so each moves the
+  plan on its own axis — and then scale the spend by **party size** (a family's round
+  is 4×).
 - **Confidence band (P90).** The product is a *risk* statement but is point-estimate
   only today — surface a range, not a single leave-by.
 
 **Phase 2 — Dashboard exposes the full param set** as live controls. ✅ **DONE.**
-`DashboardControls.tsx` — a "Fine-tune your plan" card above the result — surfaces
-origin (via the shared `OriginPicker`), target, mode, chill, concessions and party
-buffer; every change mutates `plan` and recomputes through the existing `useMemo`.
-`OriginPicker.tsx` is extracted so onboarding + dashboard are one view on the origin
-param (live location locks its button once selected on the dashboard).
+`DashboardControls.tsx` — a "Fine-tune your plan" card — surfaces origin (via the
+shared `OriginPicker`), target, mode, chill, concessions, party buffer and the
+budget caps (overall + food sub-cap, with a food/transport split); every change
+mutates `plan` and recomputes through the existing `useMemo`. `OriginPicker.tsx` is
+extracted so onboarding + dashboard are one view on the origin param (live location
+locks its button once selected on the dashboard). **The dashboard is a two-column,
+fit-the-fold layout** on desktop: a **tune column** (`TuneTabs` — two tabs, "Trip &
+weather" and "Budget & food", each filling the column height) beside a **results
+column** (`ResultPanel` variant `"main"` — hero through timeline), with the venue
+map/specs/sensitivity (`variant="venue"`) a scroll below the fold and a `ScrollHint`
+pill cueing it. On mobile the two columns collapse to one **view-toggled** pane
+(`page.tsx` `view` state): a tune page with a "See my plan →" confirm button and a
+results page with "← Adjust plan", so tuning never requires scrolling past the
+result. Venue outlets are module-cached in `VenueFood` so tab swaps don't re-query.
+`rec` recomputes live, so switching tabs/views is instant.
 
 **Phase 3 — Lean onboarding (consent + intent only).** ✅ **DONE.** Wizard trimmed
 from 5 steps to **4**: (1) **which match**; (2) **allow live location** — a one-time

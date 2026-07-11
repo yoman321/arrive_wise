@@ -14,8 +14,10 @@
 // line at the perimeter; this stays the deterministic fallback.
 
 import type {
+  ConcessionItem,
   Conditions,
   CostLine,
+  FoodTier,
   Match,
   ModeCost,
   Stadium,
@@ -33,15 +35,6 @@ const MONEY = {
   fuelUsdPerMile: 0.16,
   /** Typical event-lot parking before importance + venue scaling. */
   parkingBaseUsd: 22,
-  /**
-   * Concession spend per minute at the stands, by country — venue food is pricey
-   * (a stadium beer ≈ $14 + a hot dog ≈ $8, so ~15 min buys ≈ a $27 round in the
-   * US). Mexico's venues are cheaper; normalised to USD.
-   */
-  foodUsdPerMin: { USA: 1.8, Canada: 1.7, Mexico: 0.8 } as Record<
-    Stadium["country"],
-    number
-  >,
   rideshare: {
     baseUsd: 2.75,
     bookingUsd: 2.5,
@@ -67,17 +60,95 @@ function tripMiles(trip: TripInput): number {
   return (trip.freeFlowDriveMin / 60) * MONEY.metroMph;
 }
 
+// ---- Concessions: a representative basket per region, scaled by price tier ----
+// The basket is the single source for both the on-screen menu and the food-budget
+// number (params lead the UI). Item *names* follow the venue's region; item
+// *prices* are a baseline scaled by the venue's `foodTier`. Both are transparent
+// estimates — real per-item stadium prices aren't publicly fetchable.
+
+type Region = "US" | "Canada" | "Mexico";
+
+/** Baseline (standard-tier) menu per region, in USD. */
+const REGION_BASKET: Record<Region, ConcessionItem[]> = {
+  US: [
+    { name: "Draft beer", usd: 13 },
+    { name: "Hot dog", usd: 8 },
+    { name: "Soda", usd: 6 },
+    { name: "Loaded nachos", usd: 11 },
+    { name: "Soft pretzel", usd: 7 },
+    { name: "Bottled water", usd: 5 },
+  ],
+  Canada: [
+    { name: "Draft beer", usd: 13.5 },
+    { name: "Hot dog", usd: 8.5 },
+    { name: "Soda", usd: 6 },
+    { name: "Poutine", usd: 12 },
+    { name: "Soft pretzel", usd: 7 },
+    { name: "Bottled water", usd: 5 },
+  ],
+  Mexico: [
+    { name: "Cerveza", usd: 6 },
+    { name: "Tacos (2)", usd: 5 },
+    { name: "Refresco", usd: 4 },
+    { name: "Nachos", usd: 7 },
+    { name: "Elote", usd: 4 },
+    { name: "Agua", usd: 3 },
+  ],
+};
+
+/** How the tier shifts baseline prices (standard = the baseline itself). */
+const TIER_MULTIPLIER: Record<FoodTier, number> = {
+  value: 0.8,
+  standard: 1,
+  premium: 1.25,
+};
+
+/** Default tier when a venue doesn't declare one. */
+const COUNTRY_DEFAULT_TIER: Record<Stadium["country"], FoodTier> = {
+  USA: "standard",
+  Canada: "standard",
+  Mexico: "value",
+};
+
+/** A fan grabs roughly one concession item per this many minutes of dwell. */
+const MINUTES_PER_ITEM = 5.5;
+
+const regionOf = (c: Stadium["country"]): Region =>
+  c === "Mexico" ? "Mexico" : c === "Canada" ? "Canada" : "US";
+
+/** The venue's price tier — explicit if set, else a country default. */
+export function foodTierFor(stadium: Stadium): FoodTier {
+  return stadium.foodTier ?? COUNTRY_DEFAULT_TIER[stadium.country] ?? "standard";
+}
+
+/** The representative concession menu for a venue (region items × tier prices). */
+export function foodBasketFor(stadium: Stadium): ConcessionItem[] {
+  const mult = TIER_MULTIPLIER[foodTierFor(stadium)];
+  return REGION_BASKET[regionOf(stadium.country)].map((i) => ({
+    name: i.name,
+    usd: round2(i.usd * mult),
+  }));
+}
+
+/** Spend per minute of concessions dwell, derived from the venue's basket. */
+export function foodRatePerMin(stadium: Stadium): number {
+  const basket = foodBasketFor(stadium);
+  const avg = basket.reduce((s, i) => s + i.usd, 0) / basket.length;
+  return round2(avg / MINUTES_PER_ITEM);
+}
+
 /**
- * Food & drink spend at the venue for a given concessions dwell, priced by the
- * venue's country. Its own real budget line — a stadium round adds up fast — not
- * just the time it takes. Mode-independent (you eat wherever you're seated).
+ * Food & drink spend at the venue for a given concessions dwell, priced from the
+ * venue's basket (region items × price tier). Its own real budget line — a stadium
+ * round adds up fast — not just the time it takes. Mode-independent (you eat
+ * wherever you're seated).
  */
 export function estimateFoodCost(
   concessionsMin: number,
   stadium: Stadium
 ): number {
   if (concessionsMin <= 0) return 0;
-  return round2(concessionsMin * (MONEY.foodUsdPerMin[stadium.country] ?? 1.6));
+  return round2(concessionsMin * foodRatePerMin(stadium));
 }
 
 /**

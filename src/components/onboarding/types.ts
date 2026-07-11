@@ -38,9 +38,12 @@ export interface TripPlan {
   concessionsMin?: number;
   /** Quiet buffer for a slower group — kids, stroller, accessibility (0 = none). */
   partyBufferMin?: number;
-  /** Trip budget cap in USD — a dashboard threshold over the engine's per-mode
-   * cost estimate (flags modes you can't afford; doesn't change timing). */
+  /** Overall trip budget cap in USD — a dashboard threshold over the engine's
+   * per-mode cost estimate (flags modes you can't afford; doesn't change timing). */
   budgetUsd?: number;
+  /** Food sub-cap in USD — a slice of the overall cap set aside for concessions;
+   * the remainder is the transportation allowance. Advisory, like budgetUsd. */
+  foodBudgetUsd?: number;
   /** Price the trip both ways (doubles fare / rideshare / gas, not parking/food). */
   roundTrip?: boolean;
 }
@@ -63,6 +66,7 @@ export function initialPlan(): TripPlan {
     mode: "drive",
     chill: 0.5,
     budgetUsd: 60,
+    foodBudgetUsd: 20,
     roundTrip: false,
   };
 }

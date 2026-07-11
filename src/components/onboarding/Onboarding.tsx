@@ -57,9 +57,9 @@ export default function Onboarding({
 
   return (
     <div className="mx-auto w-full max-w-xl">
-      <div className="card p-6 sm:p-8">
+      <div className="card p-5 sm:p-6">
         {/* Progress */}
-        <div className="mb-6">
+        <div className="mb-5">
           <div className="mb-2 flex items-center justify-between text-xs">
             <span className="font-medium uppercase tracking-widest text-accent">
               Step {step + 1} of {STEPS.length}
@@ -81,14 +81,14 @@ export default function Onboarding({
 
         {/* Title + body (re-animates on step change) */}
         <div key={step} className="fade-up">
-          <h2 className="mb-4 text-xl font-black tracking-tight text-text sm:text-2xl">
+          <h2 className="mb-3 text-lg font-black tracking-tight text-text sm:text-xl">
             {def.title}
           </h2>
           <Body plan={plan} update={update} />
         </div>
 
         {/* Footer */}
-        <div className="mt-7 flex items-center justify-between gap-3">
+        <div className="mt-6 flex items-center justify-between gap-3">
           {/* suppressHydrationWarning: `disabled` is deterministic here, but form
               extensions (password managers, Grammarly, etc.) mutate button
               attributes before hydration — this keeps that noise out of dev. */}

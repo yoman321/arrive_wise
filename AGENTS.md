@@ -37,18 +37,24 @@ read it for the "why" and what's next. This file is the always-on rule set.
 ```
 src/
   app/
-    page.tsx           # orchestrator: onboarding <-> dashboard; fetches live weather
+    page.tsx           # orchestrator: onboarding <-> dashboard (tune | results views); fetches live weather
     api/
       geocode/route.ts # Nominatim proxy (address -> coords)
       route/route.ts   # drive time: TomTom -> OSRM -> haversine estimate
       weather/route.ts # Open-Meteo venue forecast -> WeatherKind
+      venue-food/route.ts # OSM Overpass (mirrors) -> outlets near venue; typical-list fallback
     layout.tsx globals.css
   components/
     onboarding/
       Onboarding.tsx   # lean 4-step wizard shell (progress, Back/Next, validation)
       types.ts         # TripPlan + planTo{Trip,Prefs,Conditions} engine bridge  <-- read
       steps/*.tsx      # StepEvent | StepLocation | StepTravel | StepStyle (target defaults; chill = 3 presets, fine-tuned on dashboard)
-    ResultPanel.tsx    # hero, conditions strip (mode·traffic·weather), stats, chart/map/timeline
+    ResultPanel.tsx    # results: variant "main" (hero…timeline, fills the fold) | "venue" (map+specs+sensitivity, below fold) | "full"
+    TuneTabs.tsx       # 2-tab tune column ("Trip & weather" | "Budget & food") — fills column height, one tab at a time
+    DashboardControls.tsx # "Fine-tune" card; section prop = "trip" | "budget" | "all" (split for the tabs)
+    WeatherPicker.tsx  # match-day weather selector (in Trip tab); exports WEATHER_META
+    VenueFood.tsx      # live venue outlets (Overpass, module-cached) + per-venue concession price basket (Budget tab)
+    ScrollHint.tsx     # click-to-scroll pill, fades in after 5s only when the page overflows below the fold
     WaitChart.tsx Timeline.tsx MatchMap.tsx
   lib/
     engine/            # THE ALGORITHM (pure TS) — see SUMMARY.md §5
@@ -56,7 +62,7 @@ src/
       curves.ts        #   constants: arrival/surge/diurnal curves, WEATHER_EFFECTS, parkingSurge, MODE_PHYSICS
       queue.ts         #   crowd + fluid security-queue model (the heart)
       travel.ts        #   per-mode travel physics; back-solve departure from gate arrival
-      money.ts         #   deterministic per-mode cost (parking/gas, rideshare surge, transit fare, food, round-trip)
+      money.ts         #   deterministic per-mode cost (parking/gas, rideshare surge, transit fare, food, round-trip); per-venue concession basket (region items x foodTier) drives foodRatePerMin
       cost.ts optimizer.ts time.ts helpers.ts types.ts
     data/
       stadiums.ts matches.ts origins.ts

@@ -33,10 +33,31 @@ export interface Stadium {
    * exposed regardless. Defaults to "open" when absent.
    */
   roofType?: RoofType;
+  /**
+   * Concession price level for this venue, driving the food-budget line. A
+   * transparent estimate (like the operational params above), not scraped menu
+   * data — real prices aren't publicly fetchable. Defaults by country when absent.
+   */
+  foodTier?: FoodTier;
 }
 
 /** How a venue is covered — drives weather sensitivity. */
 export type RoofType = "open" | "retractable" | "dome";
+
+/** Relative concession price level at a venue. */
+export type FoodTier = "value" | "standard" | "premium";
+
+/** A representative concession item and its typical price (USD). */
+export interface ConcessionItem {
+  name: string;
+  usd: number;
+}
+
+/** A food/retail outlet at or around a venue (from OSM, or a typical fallback). */
+export interface VenueOutlet {
+  name: string;
+  category: string;
+}
 
 /** Match importance drives expected attendance fraction + traffic surge. */
 export type Round = "group" | "round32" | "round16" | "quarter" | "semi" | "final";

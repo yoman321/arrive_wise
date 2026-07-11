@@ -52,7 +52,7 @@ export default function WaitChart({ rec }: { rec: Recommendation }) {
   const planWait = rec.securityWaitMin;
 
   return (
-    <div className="h-56 w-full">
+    <div className="h-44 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 12, right: 14, bottom: 4, left: 6 }}>
           <defs>

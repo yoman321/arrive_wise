@@ -129,6 +129,38 @@ input[type="range"]::-moz-range-thumb {
   animation: fadeUp 0.4s ease both;
 }
 
+/* Scroll-to-venue hint — centred (transform persisted by `both`) + bouncing arrow */
+@keyframes scrollHintIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@keyframes scrollBounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(4px);
+  }
+}
+.scroll-hint {
+  animation: scrollHintIn 0.35s ease both;
+}
+.scroll-hint-arrow {
+  animation: scrollBounce 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-hint-arrow {
+    animation: none;
+  }
+}
+
 /* Leaflet dark tweaks */
 .leaflet-container {
   background: var(--bg-soft) !important;

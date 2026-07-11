@@ -11,6 +11,7 @@ import type { Stadium } from "../engine/types";
 export const STADIUMS: Stadium[] = [
   {
     id: "metlife",
+    foodTier: "premium",
     roofType: "open",
     name: "MetLife Stadium",
     city: "New York / New Jersey",
@@ -28,6 +29,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "att",
+    foodTier: "premium",
     roofType: "retractable",
     name: "AT&T Stadium",
     city: "Dallas",
@@ -45,6 +47,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "sofi",
+    foodTier: "premium",
     roofType: "dome",
     name: "SoFi Stadium",
     city: "Los Angeles",
@@ -62,6 +65,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "levis",
+    foodTier: "premium",
     roofType: "open",
     name: "Levi's Stadium",
     city: "San Francisco Bay Area",
@@ -79,6 +83,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "lumen",
+    foodTier: "standard",
     roofType: "open",
     name: "Lumen Field",
     city: "Seattle",
@@ -96,6 +101,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "arrowhead",
+    foodTier: "standard",
     roofType: "open",
     name: "Arrowhead Stadium",
     city: "Kansas City",
@@ -113,6 +119,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "nrg",
+    foodTier: "standard",
     roofType: "retractable",
     name: "NRG Stadium",
     city: "Houston",
@@ -130,6 +137,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "mercedes",
+    foodTier: "value",
     roofType: "retractable",
     name: "Mercedes-Benz Stadium",
     city: "Atlanta",
@@ -147,6 +155,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "hardrock",
+    foodTier: "premium",
     roofType: "open",
     name: "Hard Rock Stadium",
     city: "Miami",
@@ -164,6 +173,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "gillette",
+    foodTier: "standard",
     roofType: "open",
     name: "Gillette Stadium",
     city: "Boston",
@@ -181,6 +191,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "linc",
+    foodTier: "standard",
     roofType: "open",
     name: "Lincoln Financial Field",
     city: "Philadelphia",
@@ -198,6 +209,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "bmo",
+    foodTier: "standard",
     roofType: "open",
     name: "BMO Field",
     city: "Toronto",
@@ -215,6 +227,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "bcplace",
+    foodTier: "standard",
     roofType: "retractable",
     name: "BC Place",
     city: "Vancouver",
@@ -232,6 +245,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "azteca",
+    foodTier: "standard",
     roofType: "open",
     name: "Estadio Azteca",
     city: "Mexico City",
@@ -249,6 +263,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "akron",
+    foodTier: "value",
     roofType: "open",
     name: "Estadio Akron",
     city: "Guadalajara",
@@ -266,6 +281,7 @@ export const STADIUMS: Stadium[] = [
   },
   {
     id: "bbva",
+    foodTier: "standard",
     roofType: "open",
     name: "Estadio BBVA",
     city: "Monterrey",
