@@ -141,7 +141,3 @@ without a key is a real route with no live traffic, and the offline estimate is
 distance-based. Roof types and travel-mode effects are transparent, tunable
 inputs. The honest path for per-fan calibration is a crowdsourced feedback loop
 (fans reporting actual waits) — a designed-in next step, not part of this build.
-
----
-
-_Built with [Claude Code](https://claude.com/claude-code)._
