@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { Match } from "@/lib/engine/types";
 import type { StepProps, TripPlan } from "./types";
 import StepEvent from "./steps/StepEvent";
 import StepLocation from "./steps/StepLocation";
@@ -33,9 +34,13 @@ const STEPS: StepDef[] = [
 export default function Onboarding({
   initial,
   onComplete,
+  schedule,
+  scheduleLive,
 }: {
   initial: TripPlan;
   onComplete: (plan: TripPlan) => void;
+  schedule?: Match[];
+  scheduleLive?: boolean;
 }) {
   const [plan, setPlan] = useState<TripPlan>(initial);
   const [step, setStep] = useState(0);
@@ -84,7 +89,12 @@ export default function Onboarding({
           <h2 className="mb-3 text-lg font-black tracking-tight text-text sm:text-xl">
             {def.title}
           </h2>
-          <Body plan={plan} update={update} />
+          <Body
+            plan={plan}
+            update={update}
+            schedule={schedule}
+            scheduleLive={scheduleLive}
+          />
         </div>
 
         {/* Footer */}

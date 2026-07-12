@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { recommend } from "@/lib/engine";
 import { STADIUM_BY_ID } from "@/lib/data/stadiums";
-import type { WeatherInput, WeatherKind } from "@/lib/engine/types";
+import { MATCHES } from "@/lib/data/matches";
+import { getSchedule } from "@/lib/schedule";
+import type { Match, WeatherInput, WeatherKind } from "@/lib/engine/types";
 import Onboarding from "@/components/onboarding/Onboarding";
 import ResultPanel from "@/components/ResultPanel";
 import TuneTabs from "@/components/TuneTabs";
@@ -15,6 +17,7 @@ import {
   planToTrip,
   type TripPlan,
 } from "@/components/onboarding/types";
+import { isMatchPast } from "@/lib/ui";
 
 export default function Home() {
   const [plan, setPlan] = useState<TripPlan>(() => initialPlan());
@@ -31,8 +34,26 @@ export default function Home() {
     matchId: string;
     weather: WeatherInput;
   } | null>(null);
+  // Onboarding schedule: live WC2026 fixtures from the perimeter feed, with the
+  // hand-authored seed as the synchronous fallback so first paint always has a list.
+  const [schedule, setSchedule] = useState<Match[]>(MATCHES);
+  const [scheduleLive, setScheduleLive] = useState(false);
 
   const stadium = STADIUM_BY_ID[plan.match.stadiumId];
+
+  // Pull the forward-looking fixture list once (cached across mounts/reloads);
+  // falls back silently to the seed.
+  useEffect(() => {
+    let cancelled = false;
+    getSchedule().then((s) => {
+      if (cancelled) return;
+      setSchedule(s.matches);
+      setScheduleLive(s.live);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Fetch live venue weather for the match date/hour (falls back silently).
   useEffect(() => {
@@ -90,7 +111,7 @@ export default function Home() {
     setPlan((p) => ({ ...p, ...patch }));
 
   return (
-    <div className="mx-auto w-full max-w-7xl overflow-x-clip px-4 py-5 sm:px-6 sm:py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col overflow-x-clip px-4 py-5 sm:px-6 sm:py-8">
       {/* Header — compact one-line bar on the dashboard (brand · plan · actions) */}
       <header className={phase === "onboarding" ? "mb-4" : "mb-5"}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
@@ -105,9 +126,14 @@ export default function Home() {
           </span>
           {phase === "dashboard" && (
             <>
-              <span className="hidden text-sm text-muted sm:inline">
+              <span className="hidden items-center text-sm text-muted sm:inline">
                 <span className="mx-1 text-faint">·</span>
                 {plan.match.home} vs {plan.match.away}{" "}
+                {isMatchPast(plan.match) && (
+                  <span className="chip mx-1 whitespace-nowrap px-1.5 py-0.5 text-[10px] font-medium text-faint">
+                    Finished
+                  </span>
+                )}
                 <span className="text-faint">from {plan.origin.label}</span>
               </span>
               <div className="ml-auto flex gap-2">
@@ -148,6 +174,8 @@ export default function Home() {
       {phase === "onboarding" ? (
         <Onboarding
           initial={plan}
+          schedule={schedule}
+          scheduleLive={scheduleLive}
           onComplete={(p) => {
             setPlan(p);
             setView("tune");
@@ -209,7 +237,7 @@ export default function Home() {
         </>
       )}
 
-      <footer className="mt-6 border-t border-border-soft pt-4 text-xs text-faint">
+      <footer className="mt-auto border-t border-border-soft pt-4 text-xs text-faint">
         <p>
           ArriveWise is a mechanistic model built for United Hacks V7. Arrival
           curves, turnstile throughput and traffic surge are transparent,

@@ -268,6 +268,30 @@ food-tier checks (premium > value rate; region-correct items).
   is 4×).
 - **Confidence band (P90).** The product is a *risk* statement but is point-estimate
   only today — surface a range, not a single leave-by.
+- **Live, forward-looking match data (the onboarding schedule) — ✅ DONE.** The
+  onboarding schedule is now fetched live at the perimeter instead of leaning on
+  historical seed data. `src/app/api/matches/route.ts` pulls the real WC2026
+  **knockout** fixtures from **TheSportsDB** (keyless free tier), per-round via
+  `eventsround.php` (the season endpoint is truncated on the free tier; the round
+  endpoint is not) — quarter-finals (`r=125`) and semi-finals (`r=150`), plus a few
+  future-proof round codes. Each event is resolved to one of our 16 stadiums (venue
+  name → id, with FIFA "<city> Stadium" aliases + loose containment so
+  "GEHA Field at Arrowhead Stadium" still maps), the **round is derived from the
+  venue-local date**, and kickoff uses the feed's `dateEventLocal` / `strTimeLocal`.
+  **Partial knowledge is handled**: later rounds the feed hasn't scheduled yet (the
+  final, whose teams depend on games still to play) are filled from the seed with
+  teams blanked to a **"TBD" placeholder**; undecided team fields from the feed get
+  the same treatment. The route **only returns the live set when it has upcoming
+  games**, else it falls back to the hand-authored `MATCHES` — so the demo never
+  breaks. Client wiring: `page.tsx` fetches `/api/matches` on mount into `schedule`
+  state (seed as the synchronous fallback) and threads it (with a `scheduleLive`
+  flag → a "Live schedule" vs "Sample schedule" badge) through `Onboarding` →
+  `StepEvent`. `StepEvent` renders `upcomingMatches()` (new helper in `ui.ts`):
+  finished games are hidden while any fixture is still upcoming (soonest first),
+  falling back to most-recent-first only once the whole schedule is in the past.
+  Verified live end-to-end (real QF/SF fixtures, past games hidden, the final shown
+  as an undecided placeholder) and on the fallback path; `typecheck` / `lint` /
+  `sanity` green.
 
 **Phase 2 — Dashboard exposes the full param set** as live controls. ✅ **DONE.**
 `DashboardControls.tsx` — a "Fine-tune your plan" card — surfaces origin (via the

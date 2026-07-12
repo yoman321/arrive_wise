@@ -52,6 +52,11 @@ export interface TripPlan {
 export interface StepProps {
   plan: TripPlan;
   update: (patch: Partial<TripPlan>) => void;
+  /** The match schedule to choose from — live fixtures when resolved, else the
+   * seed `MATCHES`. Only `StepEvent` reads it. */
+  schedule?: Match[];
+  /** Whether `schedule` came from the live feed (drives a provenance badge). */
+  scheduleLive?: boolean;
 }
 
 export function initialPlan(): TripPlan {

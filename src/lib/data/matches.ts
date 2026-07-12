@@ -81,3 +81,39 @@ export const MATCHES: Match[] = [
 export const MATCH_BY_ID: Record<string, Match> = Object.fromEntries(
   MATCHES.map((m) => [m.id, m])
 );
+
+// The fixed remaining knockout fixtures. FIFA assigns each slot a venue + date +
+// kickoff when the schedule is published, so we *always* know where and when these
+// games happen — only the teams depend on games still to be played. They show as
+// placeholders (venue/date known, teams "TBD") so the schedule stays complete
+// before the bracket resolves; the live feed (see api/matches) overlays the real
+// teams onto any slot it already covers (matched by venue + date).
+export const KNOCKOUT_SCHEDULE: Match[] = [
+  {
+    id: "sf1",
+    stadiumId: "att", // Dallas
+    date: "2026-07-14",
+    kickoff: "14:00",
+    home: "TBD",
+    away: "TBD",
+    round: "semi",
+  },
+  {
+    id: "sf2",
+    stadiumId: "mercedes", // Atlanta
+    date: "2026-07-15",
+    kickoff: "15:00",
+    home: "TBD",
+    away: "TBD",
+    round: "semi",
+  },
+  {
+    id: "wc-final",
+    stadiumId: "metlife", // New York / New Jersey
+    date: "2026-07-19",
+    kickoff: "15:00",
+    home: "TBD",
+    away: "TBD",
+    round: "final",
+  },
+];

@@ -43,6 +43,7 @@ src/
       route/route.ts   # drive time: TomTom -> OSRM -> haversine estimate
       weather/route.ts # Open-Meteo venue forecast -> WeatherKind
       venue-food/route.ts # OSM Overpass (mirrors) -> outlets near venue; typical-list fallback
+      matches/route.ts # TheSportsDB knockout rounds -> upcoming WC2026 fixtures; seed fallback
     layout.tsx globals.css
   components/
     onboarding/
@@ -77,8 +78,15 @@ README.md  docs/SUBMISSION.md  docs/screenshot.png
 npm run sanity     # engine assertions (headless, no UI)
 npm run typecheck  # tsc --noEmit
 npm run lint
-npm run build      # what Vercel runs — must pass
+npm run build      # what Vercel runs — must pass (but see the caveat below)
 ```
+
+- **Don't run `npm run build` while the dev server is live.** A production build
+  writes into the same `.next/` the running dev server serves from, rotating chunk
+  hashes out from under any open browser tab → `Failed to load chunk …` in the UI.
+  While iterating, verify with **`sanity` / `typecheck` / `lint` only**; leave the
+  dev server running. Run `npm run build` as a *separate, final* gate — with the dev
+  server stopped (and `rm -rf .next` first if a tab was mid-session).
 
 ## Gotchas (don't repeat)
 
