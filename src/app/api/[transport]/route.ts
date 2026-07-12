@@ -16,6 +16,7 @@ import {
   buildScenario,
   baseUrl,
   mergeInput,
+  MissingInfoError,
   type PlanArrivalInput,
 } from "@/lib/mcp/planner";
 import { getContextPlan, setContextPlan } from "@/lib/mcp/context";
@@ -37,6 +38,24 @@ function resolveWithContext(
     : { input, basedOnCurrent: false };
 }
 
+// When the planner can't proceed without inventing a number, surface the questions
+// instead of a plan — the client (or the fan) supplies the missing piece.
+function needsInfoResult(e: MissingInfoError) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: `I need a bit more before I can plan this:\n- ${e.questions.join("\n- ")}`,
+      },
+    ],
+    structuredContent: {
+      needsMoreInfo: true,
+      missing: e.missing,
+      questions: e.questions,
+    },
+  };
+}
+
 const handler = createMcpHandler(
   (server) => {
     server.registerTool(
@@ -44,7 +63,7 @@ const handler = createMcpHandler(
       {
         title: "Plan arrival",
         description:
-          "Build a complete ArriveWise match-day plan from a fan's intent, then return a plain-English brief plus a dashboard link that opens the exact scenario. Self-enriching: it resolves the fixture, geocodes the origin, routes the drive (live/predicted traffic), pulls venue weather, and runs the deterministic engine. Provide whatever the fan mentioned; everything except a venue/fixture is optional. Use list_matches / list_stadiums first when you need concrete ids.",
+          "Build a complete ArriveWise match-day plan from a fan's intent, then return a plain-English brief plus a dashboard link that opens the exact scenario. Self-enriching: it resolves the fixture, sets the origin from a rough distance bucket, pulls venue weather, and runs the deterministic engine. Origin is a rough distance only — this tool does NOT geocode addresses or use GPS/live location. Provide whatever the fan mentioned; everything except a venue/fixture is optional. Use list_matches / list_stadiums first when you need concrete ids.",
         inputSchema: {
           matchId: z
             .string()
@@ -66,12 +85,12 @@ const handler = createMcpHandler(
             .string()
             .optional()
             .describe(
-              "Where the fan leaves from: a full address to geocode ('123 Main St, Newark NJ'), or a rough descriptor ('across town', 'out of state')."
+              "How far the fan is from the venue, as a rough distance bucket — 'right nearby', 'same city', 'across the metro', or 'out of town'. NOT a street address (no geocoding); a place name that isn't one of these buckets is ignored in favor of the current distance."
             ),
           originDriveMin: z
             .number()
             .optional()
-            .describe("Override: known free-flow drive minutes (skips geocoding)."),
+            .describe("Rough free-flow drive minutes to the venue — the precise way to set the distance."),
           mode: z
             .enum(["drive", "transit", "rideshare", "walk", "bike"])
             .optional()
@@ -117,17 +136,22 @@ const handler = createMcpHandler(
       },
       async ({ useCurrentSelections, ...rest }) => {
         const { input, basedOnCurrent } = resolveWithContext(rest, useCurrentSelections);
-        const result = await buildScenario(input);
-        setContextPlan(result.plan); // keep the shared context in step
-        const note = basedOnCurrent ? "Adjusted your current plan.\n\n" : "";
-        return {
-          content: [{ type: "text", text: note + result.summary }],
-          structuredContent: {
-            basedOnCurrent,
-            dashboardUrl: result.dashboardUrl,
-            ...result.details,
-          },
-        };
+        try {
+          const result = await buildScenario(input);
+          setContextPlan(result.plan); // keep the shared context in step
+          const note = basedOnCurrent ? "Adjusted your current plan.\n\n" : "";
+          return {
+            content: [{ type: "text", text: note + result.summary }],
+            structuredContent: {
+              basedOnCurrent,
+              dashboardUrl: result.dashboardUrl,
+              ...result.details,
+            },
+          };
+        } catch (e) {
+          if (e instanceof MissingInfoError) return needsInfoResult(e);
+          throw e;
+        }
       }
     );
 
@@ -180,24 +204,39 @@ const handler = createMcpHandler(
           parsedInput,
           useCurrentSelections
         );
-        const result = await buildScenario(input);
-        setContextPlan(result.plan);
-        const note = basedOnCurrent ? " · adjusted your current plan" : "";
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Understood (${parsed.source}${note}): ${JSON.stringify(parsedInput)}\n\n${result.summary}`,
+        try {
+          const result = await buildScenario(input);
+          setContextPlan(result.plan);
+          const note = basedOnCurrent ? " · adjusted your current plan" : "";
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Understood (${parsed.source}${note}): ${JSON.stringify(parsedInput)}\n\n${result.summary}`,
+              },
+            ],
+            structuredContent: {
+              parsedFrom: parsed.source,
+              basedOnCurrent,
+              interpreted: parsedInput,
+              dashboardUrl: result.dashboardUrl,
+              ...result.details,
             },
-          ],
-          structuredContent: {
-            parsedFrom: parsed.source,
-            basedOnCurrent,
-            interpreted: parsedInput,
-            dashboardUrl: result.dashboardUrl,
-            ...result.details,
-          },
-        };
+          };
+        } catch (e) {
+          if (e instanceof MissingInfoError) {
+            const r = needsInfoResult(e);
+            return {
+              ...r,
+              structuredContent: {
+                ...r.structuredContent,
+                parsedFrom: parsed.source,
+                interpreted: parsedInput,
+              },
+            };
+          }
+          throw e;
+        }
       }
     );
 

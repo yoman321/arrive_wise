@@ -36,20 +36,30 @@ export default function Onboarding({
   onComplete,
   schedule,
   scheduleLive,
+  matchConfirmed = false,
 }: {
   initial: TripPlan;
   onComplete: (plan: TripPlan) => void;
   schedule?: Match[];
   scheduleLive?: boolean;
+  /** True when re-opening an already-planned trip (Edit trip), so the existing
+   * match counts as chosen and isn't forced to be re-picked. */
+  matchConfirmed?: boolean;
 }) {
   const [plan, setPlan] = useState<TripPlan>(initial);
   const [step, setStep] = useState(0);
+  // A game must be actively picked before leaving the first step; the pre-filled
+  // default doesn't count as a choice.
+  const [matchChosen, setMatchChosen] = useState(matchConfirmed);
 
-  const update = (patch: Partial<TripPlan>) => setPlan((p) => ({ ...p, ...patch }));
+  const update = (patch: Partial<TripPlan>) => {
+    if (patch.match) setMatchChosen(true);
+    setPlan((p) => ({ ...p, ...patch }));
+  };
 
   const def = STEPS[step];
   const isLast = step === STEPS.length - 1;
-  const canNext = def.valid(plan);
+  const canNext = def.key === "event" ? matchChosen : def.valid(plan);
 
   const next = () => {
     if (!canNext) return;
@@ -94,6 +104,7 @@ export default function Onboarding({
             update={update}
             schedule={schedule}
             scheduleLive={scheduleLive}
+            matchChosen={matchChosen}
           />
         </div>
 

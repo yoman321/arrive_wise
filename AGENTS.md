@@ -37,7 +37,7 @@ read it for the "why" and what's next. This file is the always-on rule set.
 ```
 src/
   app/
-    page.tsx           # orchestrator: onboarding <-> dashboard (tune | results views); fetches live weather
+    page.tsx           # orchestrator: onboarding <-> dashboard (tune | results views); fetches live weather; publishes plan to /api/context + polls it (rev-gated) so external MCP edits land live
     api/
       geocode/route.ts # Nominatim proxy (address -> coords)
       route/route.ts   # drive time: TomTom -> OSRM -> haversine estimate
@@ -46,7 +46,7 @@ src/
       matches/route.ts # TheSportsDB knockout rounds -> upcoming WC2026 fixtures; seed fallback
       parse/route.ts   # LLM perimeter: free text -> PlanArrivalInput (Featherless; keyword fallback). FEATHERLESS_API server-side only
       chat/route.ts    # in-app assistant: Featherless conversation -> PLAN: line -> buildScenario; reads current-selections context; returns reply + TripPlan
-      context/route.ts # GET/POST the dashboard's current selections (lib/mcp/context store) — the bridge the chat + MCP tools adjust
+      context/route.ts # GET {plan,rev}/POST the dashboard's current selections (lib/mcp/context store) — the bridge the chat + MCP tools adjust; rev lets the dashboard poll for external changes without clobbering its own
       [transport]/route.ts # MCP server (Streamable HTTP) at /api/mcp: plan_arrival, plan_from_text (useCurrentSelections), get_current_plan, list_stadiums, list_matches
     layout.tsx globals.css
   components/
@@ -71,7 +71,7 @@ src/
       money.ts         #   deterministic per-mode cost (parking/gas, rideshare surge, transit fare, food, round-trip); per-venue concession basket (region items x foodTier) drives foodRatePerMin
       cost.ts optimizer.ts time.ts helpers.ts types.ts
     mcp/
-      planner.ts       # buildScenario(): self-enriching pipeline (resolve fixture -> geocode -> route -> weather -> recommend) + venue/match resolvers
+      planner.ts       # buildScenario(): self-enriching pipeline (resolve fixture -> rough-distance origin -> weather -> recommend) + venue/match resolvers. Origin is a rough distance bucket only — the MCP never geocodes or uses live location
       extract.ts       # coerceIntent (whitelist any object) + keywordIntent (deterministic NL fallback for /api/parse)
       context.ts       # in-memory "current selections" slot (get/setContextPlan) — dashboard publishes, chat + MCP read/adjust
       planner.ts (also mergeInput/baseFromPlan) # adjustment merge: apply a delta onto the current plan, honoring what a change invalidates

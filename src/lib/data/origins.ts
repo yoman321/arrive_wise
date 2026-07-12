@@ -3,6 +3,11 @@
 // engine needs. Users can also type a custom value. In a full build this number
 // would come from a routing lookup (e.g. OSRM) for a geocoded address.
 
+// A match-day arrival is a *drive to the venue* — beyond this we treat the origin
+// as implausible (e.g. geolocation from another continent). WC2026 venues are in
+// the US/Canada/Mexico; ~8h is already an overnight-stay trip, not a same-day drive.
+export const MAX_PLAUSIBLE_DRIVE_MIN = 480;
+
 export interface OriginPreset {
   id: string;
   label: string;

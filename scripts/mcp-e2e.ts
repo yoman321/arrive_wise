@@ -54,17 +54,25 @@ async function main() {
   // ── list_matches ──────────────────────────────────────────────────────────────
   console.log("\nlist_matches");
   const matches = await client.callTool({ name: "list_matches", arguments: {} });
-  const mc = matches.structuredContent as { matches?: { id: string; venue: string }[] } | undefined;
+  const mc = matches.structuredContent as
+    | { matches?: { id: string; venue: string; stadiumId: string }[] }
+    | undefined;
   check("returns a non-empty fixture list", (mc?.matches?.length ?? 0) > 0, `${mc?.matches?.length}`);
   check("each fixture has an id + venue", (mc?.matches ?? []).every((m) => m.id && m.venue));
+  // Use a REAL upcoming fixture for the rest (the tool now refuses invented ones).
+  const fixture = mc?.matches?.[0];
+  if (!fixture) {
+    console.log("  (no fixtures available — skipping fixture-dependent checks)");
+    await client.close();
+    process.exit(failures === 0 ? 0 : 1);
+  }
 
   // ── plan_arrival (structured, no LLM) ─────────────────────────────────────────
-  console.log("\nplan_arrival (venue + explicit drive time)");
+  console.log(`\nplan_arrival (matchId ${fixture.id} + explicit drive time)`);
   const plan = await client.callTool({
     name: "plan_arrival",
     arguments: {
-      venue: "MetLife",
-      match: "final",
+      matchId: fixture.id,
       originDriveMin: 30,
       mode: "drive",
       target: "kickoff",
@@ -79,6 +87,25 @@ async function main() {
   check("returns a leave-by clock time", typeof pd?.leaveByClock === "string" && /\d/.test(pd!.leaveByClock!));
   check("returns a numeric cost", typeof pd?.cost?.usd === "number");
   check("summary text mentions leaving", /leave/i.test(textOf(plan)));
+
+  // ── ask-don't-guess: refuse to invent missing data ───────────────────────────
+  console.log("\nplan_arrival refuses to fabricate (asks instead)");
+  const noOrigin = await client.callTool({
+    name: "plan_arrival",
+    arguments: { matchId: fixture.id }, // valid fixture, but no origin
+  });
+  const noOriginSc = noOrigin.structuredContent as
+    | { needsMoreInfo?: boolean; missing?: string[]; dashboardUrl?: string }
+    | undefined;
+  check("no origin → asks instead of planning", noOriginSc?.needsMoreInfo === true, JSON.stringify(noOriginSc?.missing));
+  check("no origin → no deep-link produced", !noOriginSc?.dashboardUrl);
+
+  const badVenue = await client.callTool({
+    name: "plan_arrival",
+    arguments: { venue: "Narnia Dome", originDriveMin: 20 },
+  });
+  const badVenueSc = badVenue.structuredContent as { needsMoreInfo?: boolean } | undefined;
+  check("unknown venue → asks instead of planning", badVenueSc?.needsMoreInfo === true);
 
   // ── plan_from_text (LLM or keyword fallback) ──────────────────────────────────
   console.log("\nplan_from_text (natural language)");
@@ -97,25 +124,31 @@ async function main() {
 
   // ── current context: fetch + adjust ───────────────────────────────────────────
   console.log("\nget_current_plan + useCurrentSelections (fetch & adjust the current plan)");
-  // Seed a known plan (plan_arrival writes the shared context slot).
+  // Seed a known plan from a real fixture (plan_arrival writes the shared context).
   await client.callTool({
     name: "plan_arrival",
-    arguments: { venue: "sofi", match: "quarter", originDriveMin: 25, mode: "drive", budgetUsd: 100 },
+    arguments: { matchId: fixture.id, originDriveMin: 25, mode: "drive", budgetUsd: 100 },
   });
   const cur = await client.callTool({ name: "get_current_plan", arguments: {} });
-  const cd = cur.structuredContent as { plan?: { match?: { stadiumId?: string } } } | undefined;
-  check("get_current_plan returns the seeded plan (sofi)", cd?.plan?.match?.stadiumId === "sofi", String(cd?.plan?.match?.stadiumId));
+  const cd = cur.structuredContent as
+    | { plan?: { match?: { id?: string; stadiumId?: string }; budgetUsd?: number } }
+    | undefined;
+  check("get_current_plan returns the seeded plan", cd?.plan?.match?.id === fixture.id, String(cd?.plan?.match?.id));
+  check("seeded budget is 100", cd?.plan?.budgetUsd === 100, String(cd?.plan?.budgetUsd));
 
-  // Adjust ONLY the budget — the venue must carry over from the current selections.
+  // Adjust ONLY the budget — the fixture + origin must carry over from the current plan.
   const adj = await client.callTool({
     name: "plan_arrival",
     arguments: { budgetUsd: 60, useCurrentSelections: true },
   });
   const adjd = adj.structuredContent as
-    | { basedOnCurrent?: boolean; match?: { venue?: string } }
+    | { basedOnCurrent?: boolean; match?: { id?: string } }
     | undefined;
   check("adjustment is flagged based-on-current", adjd?.basedOnCurrent === true);
-  check("adjustment keeps the venue (SoFi)", /SoFi/i.test(adjd?.match?.venue ?? ""), adjd?.match?.venue);
+  check("adjustment keeps the fixture", adjd?.match?.id === fixture.id, adjd?.match?.id);
+  const after = await client.callTool({ name: "get_current_plan", arguments: {} });
+  const afterBudget = (after.structuredContent as { plan?: { budgetUsd?: number } } | undefined)?.plan?.budgetUsd;
+  check("budget actually changed to 60", afterBudget === 60, String(afterBudget));
 
   await client.close();
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : failures + " CHECK(S) FAILED"}`);

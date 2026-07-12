@@ -14,7 +14,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const url = `${NOMINATIM}?format=jsonv2&limit=1&addressdetails=0&q=${encodeURIComponent(q)}`;
+    // WC2026 venues are all in the US, Canada, and Mexico — bias the geocoder to
+    // those so an ambiguous query resolves to a host country, not a namesake abroad.
+    const url = `${NOMINATIM}?format=jsonv2&limit=1&addressdetails=0&countrycodes=us,ca,mx&q=${encodeURIComponent(q)}`;
     const res = await fetch(url, {
       headers: { "User-Agent": UA, "Accept-Language": "en" },
       // Nominatim asks callers not to hammer it; a short cache is polite.

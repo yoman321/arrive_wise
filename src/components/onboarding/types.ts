@@ -57,6 +57,9 @@ export interface StepProps {
   schedule?: Match[];
   /** Whether `schedule` came from the live feed (drives a provenance badge). */
   scheduleLive?: boolean;
+  /** Whether the user has actively picked a match yet (StepEvent only) — so no game
+   * looks pre-selected and Next stays disabled until they choose. */
+  matchChosen?: boolean;
 }
 
 export function initialPlan(): TripPlan {

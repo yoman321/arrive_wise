@@ -10,7 +10,9 @@ import {
   scanVenueFromText,
   mergeInput,
   baseFromPlan,
+  resolveOrigin,
 } from "@/lib/mcp/planner";
+import type { OriginState } from "@/components/onboarding/types";
 import { coerceIntent, keywordIntent } from "@/lib/mcp/extract";
 import { getContextPlan, setContextPlan } from "@/lib/mcp/context";
 import type { TripPlan } from "@/components/onboarding/types";
@@ -50,6 +52,7 @@ function samplePlan(over: Partial<TripPlan> = {}): TripPlan {
     target: "anthems",
     mode: "drive",
     chill: 0.9,
+    weather: { kind: "rain", source: "manual" },
     budgetUsd: 150,
     foodBudgetUsd: 20,
     roundTrip: false,
@@ -172,6 +175,8 @@ group("mergeInput (adjust an existing plan, keeping prior selections)");
   const base = baseFromPlan(plan);
   check("baseFromPlan carries the fixture id + venue", base.matchId === "tsdb-123" && base.venue === "att");
   check("baseFromPlan carries the resolved origin", base.originResolved === plan.origin);
+  check("baseFromPlan carries the rough-estimate fallback", base.originFallback === plan.origin);
+  check("baseFromPlan carries the resolved weather", base.weatherResolved === plan.weather);
 
   const budgetOnly = mergeInput(plan, { budgetUsd: 80 });
   check(
@@ -182,6 +187,10 @@ group("mergeInput (adjust an existing plan, keeping prior selections)");
       budgetOnly.mode === "drive" &&
       budgetOnly.originResolved === plan.origin,
     `budget ${budgetOnly.budgetUsd}`
+  );
+  check(
+    "budget-only delta preserves the current weather (no re-fetch/override)",
+    budgetOnly.weatherResolved === plan.weather
   );
 
   const vibed = mergeInput(plan, { vibe: "cutItClose" });
@@ -199,18 +208,53 @@ group("mergeInput (adjust an existing plan, keeping prior selections)");
 
   const newVenue = mergeInput(plan, { venue: "sofi" });
   check(
-    "new venue drops carried fixture id + resolved origin",
-    newVenue.venue === "sofi" && newVenue.matchId === undefined && newVenue.originResolved === undefined
+    "new venue drops carried fixture id + resolved origin + fallback + weather",
+    newVenue.venue === "sofi" &&
+      newVenue.matchId === undefined &&
+      newVenue.originResolved === undefined &&
+      newVenue.originFallback === undefined &&
+      newVenue.weatherResolved === undefined
   );
 
   const newOrigin = mergeInput(plan, { origin: "Dallas" });
   check(
-    "new origin forces a re-geocode (drops resolved origin)",
+    "new origin forces a re-resolve (drops resolved origin) but keeps the rough fallback",
     newOrigin.origin === "Dallas" &&
       newOrigin.originResolved === undefined &&
+      newOrigin.originFallback === plan.origin &&
       newOrigin.venue === "att" &&
       newOrigin.matchId === "tsdb-123"
   );
+}
+
+// ── Origin resolution (rough distance ONLY — no geocoding / live location) ─────
+group("resolveOrigin (distance-picker only, never geocodes)");
+{
+  const ctx: OriginState = { label: "Same city", freeFlowDriveMin: 25, trafficSource: "preset" };
+
+  const byMin = resolveOrigin(undefined, 40, undefined, undefined);
+  check("explicit drive minutes → that distance", byMin.origin?.freeFlowDriveMin === 40, String(byMin.origin?.freeFlowDriveMin));
+
+  const phrase = resolveOrigin("we're across town", undefined, undefined, undefined);
+  check("distance phrase 'across town' → 45 min bucket", phrase.origin?.freeFlowDriveMin === 45, String(phrase.origin?.freeFlowDriveMin));
+
+  const nearby = resolveOrigin("right nearby, walking over", undefined, undefined, undefined);
+  check("distance phrase 'nearby' → 10 min bucket", nearby.origin?.freeFlowDriveMin === 10, String(nearby.origin?.freeFlowDriveMin));
+
+  const address = resolveOrigin("123 Main St, Brooklyn NY", undefined, undefined, ctx);
+  check("street address is NOT geocoded — keeps the context distance", address.origin === ctx, JSON.stringify(address.origin));
+  check("unbucketed address surfaces a 'kept distance' note", Boolean(address.note), address.note);
+
+  const noInfo = resolveOrigin("123 Main St, Brooklyn NY", undefined, undefined, undefined);
+  check("no distance + no context → ask (null)", noInfo.origin === null);
+
+  const tooFar: OriginState = { label: "Manila", lat: 14.6, lng: 121, freeFlowDriveMin: 18234, trafficSource: "routed" };
+  const degraded = resolveOrigin(undefined, undefined, tooFar, undefined);
+  check("implausibly-far carried origin → neutral ~45 min default", degraded.origin?.freeFlowDriveMin === 45, String(degraded.origin?.freeFlowDriveMin));
+
+  const keptGood: OriginState = { label: "Out of town", freeFlowDriveMin: 75, trafficSource: "preset" };
+  const reuse = resolveOrigin(undefined, undefined, keptGood, undefined);
+  check("plausible carried origin is reused as-is", reuse.origin === keptGood);
 }
 
 // ── Context store (the shared "current selections" the tools fetch + adjust) ──

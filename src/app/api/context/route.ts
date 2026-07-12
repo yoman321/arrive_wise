@@ -4,11 +4,11 @@
 // lib/mcp/context.ts for the store and its single-slot / demo-scale caveat.
 
 import { type NextRequest } from "next/server";
-import { getContextPlan, setContextPlan } from "@/lib/mcp/context";
+import { getContextState, setContextPlan } from "@/lib/mcp/context";
 import type { TripPlan } from "@/components/onboarding/types";
 
 export async function GET() {
-  return Response.json({ plan: getContextPlan() });
+  return Response.json(getContextState());
 }
 
 export async function POST(request: NextRequest) {
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as { plan?: TripPlan | null };
     const ok = setContextPlan(body.plan ?? null);
     if (!ok) return Response.json({ error: "invalid plan" }, { status: 400 });
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, rev: getContextState().rev });
   } catch {
     return Response.json({ error: "bad request" }, { status: 400 });
   }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { StepProps } from "@/components/onboarding/types";
 import type { TrafficSource } from "@/lib/engine/types";
-import { ORIGIN_PRESETS } from "@/lib/data/origins";
+import { ORIGIN_PRESETS, MAX_PLAUSIBLE_DRIVE_MIN } from "@/lib/data/origins";
 import { STADIUM_BY_ID } from "@/lib/data/stadiums";
 
 const SOURCE_LABEL: Record<TrafficSource, string> = {
@@ -47,6 +47,14 @@ export default function OriginPicker({
       const res = await fetch(`/api/route?${qs}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "routing failed");
+      // Reject an implausibly-far origin (e.g. geolocation from another continent) —
+      // WC2026 venues are in the US/Canada/Mexico; this isn't a same-day drive.
+      if (data.freeFlowDriveMin > MAX_PLAUSIBLE_DRIVE_MIN) {
+        setError(
+          `That's too far from ${stadium.city} for a match-day drive — pick a location near the venue or a rough distance below.`
+        );
+        return;
+      }
       update({
         origin: {
           label,

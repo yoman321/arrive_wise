@@ -12,7 +12,13 @@ import {
 } from "@/lib/ui";
 import { offsetToClock } from "@/lib/engine";
 
-export default function StepEvent({ plan, update, schedule, scheduleLive }: StepProps) {
+export default function StepEvent({
+  plan,
+  update,
+  schedule,
+  scheduleLive,
+  matchChosen,
+}: StepProps) {
   const matches = upcomingMatches(schedule ?? MATCHES);
   return (
     <div className="space-y-2.5">
@@ -32,7 +38,7 @@ export default function StepEvent({ plan, update, schedule, scheduleLive }: Step
             <button
               key={m.id}
               onClick={() => update({ match: m })}
-              data-active={plan.match.id === m.id}
+              data-active={!!matchChosen && plan.match.id === m.id}
               className={`seg-btn rounded-xl px-3.5 py-3 text-left ${past ? "opacity-60" : ""}`}
             >
               <div className="flex items-center justify-between gap-2">

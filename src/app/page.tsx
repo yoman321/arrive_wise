@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { recommend } from "@/lib/engine";
 import { STADIUM_BY_ID } from "@/lib/data/stadiums";
 import { MATCHES } from "@/lib/data/matches";
@@ -40,36 +40,91 @@ export default function Home() {
   // hand-authored seed as the synchronous fallback so first paint always has a list.
   const [schedule, setSchedule] = useState<Match[]>(MATCHES);
   const [scheduleLive, setScheduleLive] = useState(false);
+  // Once a trip has been planned, re-opening onboarding to edit keeps the match as
+  // chosen (no need to re-pick it).
+  const [hasPlanned, setHasPlanned] = useState(false);
 
   const stadium = STADIUM_BY_ID[plan.match.stadiumId];
 
-  // A scenario deep-link (?s=…, e.g. minted by the plan_arrival MCP tool) opens
-  // straight onto the dashboard with that exact plan. Read it once on mount, then
-  // strip the param so a refresh/share stays clean.
+  // The highest context revision we've written or applied — so polling only adopts
+  // changes newer than our own (e.g. from an external MCP tool). `ready` gates the
+  // first publish until we've synced. `baseline` marks that we've learned the
+  // server's current rev, so we never adopt a plan that was already sitting in server
+  // memory before this session loaded (which would otherwise hijack onboarding).
+  const lastRevRef = useRef(0);
+  const readyRef = useRef(false);
+  const syncedBaselineRef = useRef(false);
+
+  // Stable across renders (only uses setState setters, which React keeps stable), so
+  // the once-created poll/mount effects can list it as a dep without re-running.
+  const adoptPlan = useCallback((p: TripPlan) => {
+    setPlan(p);
+    setView("tune");
+    setPhase("dashboard");
+    setHasPlanned(true);
+  }, []);
+
+  // On mount: a `?s=` deep-link (minted by the MCP plan_arrival tool) opens straight
+  // onto that plan. Otherwise we keep the onboarding-first flow and just record the
+  // current context revision as a baseline, so polling reacts only to changes made
+  // after this load (not a stale plan left in server memory). Then allow publishing.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const s = params.get("s");
-    if (!s) return;
-    const decoded = decodePlan(s);
-    // Strip the param up front so a refresh/share stays clean.
-    const url = new URL(window.location.href);
-    url.searchParams.delete("s");
-    window.history.replaceState({}, "", url.toString());
-    if (!decoded) return;
-    // Apply in a microtask (not synchronously in the effect body) to match the
-    // async-callback setState pattern the weather/schedule effects use.
-    let cancelled = false;
-    Promise.resolve().then(() => {
-      if (cancelled) return;
-      setPlan(decoded);
-      setView("tune");
-      setPhase("dashboard");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (s) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("s");
+      window.history.replaceState({}, "", url.toString());
+      const decoded = decodePlan(s);
+      Promise.resolve().then(() => {
+        if (decoded) adoptPlan(decoded);
+        readyRef.current = true;
+      });
+      return;
+    }
+    fetch("/api/context")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { rev?: number } | null) => {
+        if (typeof d?.rev === "number") {
+          lastRevRef.current = d.rev;
+          syncedBaselineRef.current = true;
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        readyRef.current = true;
+      });
+  }, [adoptPlan]);
+
+  // Poll the shared context so an external change (an MCP tool adjusting the plan)
+  // lands on screen live — from onboarding OR the dashboard, so an MCP decision made
+  // mid-session navigates straight to it. We only adopt a revision NEWER than the one
+  // present when this session first synced (the baseline), so a plan left in server
+  // memory from a previous session never hijacks a fresh reload.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!readyRef.current) return;
+      fetch("/api/context")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { plan?: TripPlan; rev?: number } | null) => {
+          if (!d || typeof d.rev !== "number") return;
+          // First successful read establishes the baseline — never adopt what was
+          // already sitting in server memory before this session loaded.
+          if (!syncedBaselineRef.current) {
+            syncedBaselineRef.current = true;
+            lastRevRef.current = d.rev;
+            return;
+          }
+          if (!d.plan || d.rev <= lastRevRef.current) return;
+          if (!STADIUM_BY_ID[d.plan.match?.stadiumId]) return;
+          lastRevRef.current = d.rev;
+          adoptPlan(d.plan);
+        })
+        .catch(() => {});
+    }, 2000);
+    return () => clearInterval(id);
+  }, [adoptPlan]);
 
   // Pull the forward-looking fixture list once (cached across mounts/reloads);
   // falls back silently to the seed.
@@ -86,14 +141,25 @@ export default function Home() {
   }, []);
 
   // Publish the current selections so the chat + MCP tools can adjust what's on
-  // screen (debounced — slider drags fire rapidly). Fire-and-forget.
+  // screen (debounced — slider drags fire rapidly). Gated until after the mount
+  // adopt so we don't clobber a pre-existing context; tracks the returned rev so
+  // our own writes aren't re-adopted by the poll.
   useEffect(() => {
+    if (!readyRef.current) return;
     const t = setTimeout(() => {
       fetch("/api/context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan }),
-      }).catch(() => {});
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { rev?: number } | null) => {
+          if (d?.rev) {
+            lastRevRef.current = Math.max(lastRevRef.current, d.rev);
+            syncedBaselineRef.current = true;
+          }
+        })
+        .catch(() => {});
     }, 400);
     return () => clearTimeout(t);
   }, [plan]);
@@ -219,10 +285,12 @@ export default function Home() {
           initial={plan}
           schedule={schedule}
           scheduleLive={scheduleLive}
+          matchConfirmed={hasPlanned}
           onComplete={(p) => {
             setPlan(p);
             setView("tune");
             setPhase("dashboard");
+            setHasPlanned(true);
           }}
         />
       ) : (

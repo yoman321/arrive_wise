@@ -18,7 +18,8 @@ Every field is OPTIONAL — omit any the message does not clearly state. Never i
 Fields:
 - venue: stadium name or host city (e.g. "MetLife", "Dallas", "Mexico City")
 - match: a team name, OR a round: "final" | "semi-final" | "quarter-final" | "round of 16" | "group"
-- origin: where the fan starts from — an address or place name
+- origin: how far the fan starts from — a rough distance bucket only, NOT a street address: "right nearby" | "same city" | "across the metro" | "out of town"
+- originDriveMin: rough drive time to the venue in minutes, if they state one (number)
 - mode: "drive" | "transit" | "rideshare" | "walk" | "bike"
 - target: what they want to be seated for — "warmups" | "anthems" | "kickoff"
 - vibe: "cutItClose" | "balanced" | "relaxed" | "veryEarly"
