@@ -21,7 +21,6 @@ export interface Stadium {
   parkingSearchMin: number;
   /** Typical walk minutes from parking/transit to the gate. */
   lotToGateWalkMin: number;
-  /** Typical walk minutes from the gate through concourse to a seat. */
   gateToSeatWalkMin: number;
   /** Whether decent public transit exists (affects surge, informational). */
   hasTransit: boolean;

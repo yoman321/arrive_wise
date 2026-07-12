@@ -44,8 +44,13 @@ src/
       weather/route.ts # Open-Meteo venue forecast -> WeatherKind
       venue-food/route.ts # OSM Overpass (mirrors) -> outlets near venue; typical-list fallback
       matches/route.ts # TheSportsDB knockout rounds -> upcoming WC2026 fixtures; seed fallback
+      parse/route.ts   # LLM perimeter: free text -> PlanArrivalInput (Featherless; keyword fallback). FEATHERLESS_API server-side only
+      chat/route.ts    # in-app assistant: Featherless conversation -> PLAN: line -> buildScenario; reads current-selections context; returns reply + TripPlan
+      context/route.ts # GET/POST the dashboard's current selections (lib/mcp/context store) — the bridge the chat + MCP tools adjust
+      [transport]/route.ts # MCP server (Streamable HTTP) at /api/mcp: plan_arrival, plan_from_text (useCurrentSelections), get_current_plan, list_stadiums, list_matches
     layout.tsx globals.css
   components/
+    chat/ChatWidget.tsx # always-on bottom-right launcher + chat panel; lifts built scenarios onto the dashboard (view onto TripPlan)
     onboarding/
       Onboarding.tsx   # lean 4-step wizard shell (progress, Back/Next, validation)
       types.ts         # TripPlan + planTo{Trip,Prefs,Conditions} engine bridge  <-- read
@@ -65,10 +70,16 @@ src/
       travel.ts        #   per-mode travel physics; back-solve departure from gate arrival
       money.ts         #   deterministic per-mode cost (parking/gas, rideshare surge, transit fare, food, round-trip); per-venue concession basket (region items x foodTier) drives foodRatePerMin
       cost.ts optimizer.ts time.ts helpers.ts types.ts
+    mcp/
+      planner.ts       # buildScenario(): self-enriching pipeline (resolve fixture -> geocode -> route -> weather -> recommend) + venue/match resolvers
+      extract.ts       # coerceIntent (whitelist any object) + keywordIntent (deterministic NL fallback for /api/parse)
+      context.ts       # in-memory "current selections" slot (get/setContextPlan) — dashboard publishes, chat + MCP read/adjust
+      planner.ts (also mergeInput/baseFromPlan) # adjustment merge: apply a delta onto the current plan, honoring what a change invalidates
+    scenario.ts        # encodePlan/decodePlan — a TripPlan <-> `?s=` deep-link (MCP mints, page.tsx hydrates)
     data/
       stadiums.ts matches.ts origins.ts
 scripts/sanity.ts      # engine assertions incl. conditions layer (npm run sanity)
-.env.example           # optional TOMTOM_KEY (app runs without it)
+.env.example           # optional TOMTOM_KEY + FEATHERLESS_API/FEATHERLESS_MODEL (app runs without any)
 README.md  docs/SUBMISSION.md  docs/screenshot.png
 ```
 

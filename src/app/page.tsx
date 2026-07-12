@@ -10,6 +10,7 @@ import Onboarding from "@/components/onboarding/Onboarding";
 import ResultPanel from "@/components/ResultPanel";
 import TuneTabs from "@/components/TuneTabs";
 import ScrollHint from "@/components/ScrollHint";
+import ChatWidget from "@/components/chat/ChatWidget";
 import {
   initialPlan,
   planToConditions,
@@ -18,6 +19,7 @@ import {
   type TripPlan,
 } from "@/components/onboarding/types";
 import { isMatchPast } from "@/lib/ui";
+import { decodePlan } from "@/lib/scenario";
 
 export default function Home() {
   const [plan, setPlan] = useState<TripPlan>(() => initialPlan());
@@ -41,6 +43,34 @@ export default function Home() {
 
   const stadium = STADIUM_BY_ID[plan.match.stadiumId];
 
+  // A scenario deep-link (?s=…, e.g. minted by the plan_arrival MCP tool) opens
+  // straight onto the dashboard with that exact plan. Read it once on mount, then
+  // strip the param so a refresh/share stays clean.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const s = params.get("s");
+    if (!s) return;
+    const decoded = decodePlan(s);
+    // Strip the param up front so a refresh/share stays clean.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("s");
+    window.history.replaceState({}, "", url.toString());
+    if (!decoded) return;
+    // Apply in a microtask (not synchronously in the effect body) to match the
+    // async-callback setState pattern the weather/schedule effects use.
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setPlan(decoded);
+      setView("tune");
+      setPhase("dashboard");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Pull the forward-looking fixture list once (cached across mounts/reloads);
   // falls back silently to the seed.
   useEffect(() => {
@@ -54,6 +84,19 @@ export default function Home() {
       cancelled = true;
     };
   }, []);
+
+  // Publish the current selections so the chat + MCP tools can adjust what's on
+  // screen (debounced — slider drags fire rapidly). Fire-and-forget.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetch("/api/context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      }).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [plan]);
 
   // Fetch live venue weather for the match date/hour (falls back silently).
   useEffect(() => {
@@ -236,6 +279,17 @@ export default function Home() {
           <ScrollHint />
         </>
       )}
+
+      {/* AI assistant — always-on launcher, bottom-right through any scroll. Its
+          scenarios drop straight onto the dashboard via the shared plan model. */}
+      <ChatWidget
+        currentPlan={plan}
+        onScenario={(p) => {
+          setPlan(p);
+          setView("tune");
+          setPhase("dashboard");
+        }}
+      />
 
       <footer className="mt-auto border-t border-border-soft pt-4 text-xs text-faint">
         <p>

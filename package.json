@@ -8,15 +8,20 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "sanity": "tsx scripts/sanity.ts"
+    "sanity": "tsx scripts/sanity.ts",
+    "test:mcp": "tsx scripts/mcp-sanity.ts",
+    "test:mcp:e2e": "tsx scripts/mcp-e2e.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "leaflet": "^1.9.4",
+    "mcp-handler": "^1.1.0",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-leaflet": "^5.0.0",
-    "recharts": "^3.9.2"
+    "recharts": "^3.9.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
